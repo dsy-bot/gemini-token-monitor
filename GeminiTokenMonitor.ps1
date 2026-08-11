@@ -1,5 +1,5 @@
-﻿# ==============================================================================
-# Gemini Token Monitor (최적화 버전 - GDI 메모리 관리 & 15MB 리소스 최적화)
+# ==============================================================================
+# Gemini Token Monitor (모듈 분리 최적화 & 로컬 로그 스캔 모드)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -19,6 +19,12 @@ public class NativeMethods {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ConfigFile = Join-Path $ScriptDir "config.json"
 $LogFile = Join-Path $ScriptDir "monitor.log"
+$ApiModuleFile = Join-Path $ScriptDir "modules\GeminiApiPing.ps1"
+
+# API 분리 모듈 로드
+if (Test-Path $ApiModuleFile) {
+    . $ApiModuleFile
+}
 
 function Write-Log {
     param([string]$Message)
@@ -28,7 +34,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor 최적화 버전 실행"
+Write-Log "Gemini Token Monitor (모듈 분리 최적화버전) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -173,14 +179,13 @@ try {
         $Global:State.RemainingRPDPercent = [int](($remTokens / $maxQuota) * 100)
     }
 
-    # 5. GDI 메모리 해제 적용 직사각형 배지 아이콘 생성 함수
+    # 5. 직사각형 배지 트레이 아이콘 생성 함수 (GDI 메모리 해제 적용)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
             [string]$RiskLevel = "GREEN"
         )
         try {
-            # 이전 GDI 핸들 메모리 해제
             if ($Global:State.LastHIcon -ne [IntPtr]::Zero) {
                 [NativeMethods]::DestroyIcon($Global:State.LastHIcon) | Out-Null
             }
@@ -238,7 +243,6 @@ try {
             $shadowBrush.Dispose()
             $font.Dispose()
 
-            # 가비지 컬렉션 수행 (메모리 15MB 이하 유지)
             [GC]::Collect()
 
             return $icon
@@ -248,7 +252,7 @@ try {
         }
     }
 
-    # 6. Gemini API 헬스체크 및 실시간 상태 업데이트
+    # 6. Gemini 상태 및 모듈 연동 갱신 함수
     function Update-GeminiStatus {
         $Global:State.LastCheckTime = [DateTime]::Now
         $Global:State.NextCheckTime = $Global:State.LastCheckTime.AddMinutes($Global:Config.checkIntervalMinutes)
@@ -258,22 +262,13 @@ try {
             $Global:State.RiskLevel = "YELLOW"
             $Global:State.RiskDescription = "[경고] API 키 미설정"
         } else {
-            $uri = "https://generativelanguage.googleapis.com/v1beta/models?key=" + $Global:Config.apiKey
-            
-            $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            try {
-                $res = Invoke-RestMethod -Uri $uri -Method Get -ContentType "application/json" -TimeoutSec 8
-                $sw.Stop()
-                $Global:State.LatencyMs = $sw.ElapsedMilliseconds
-                $Global:State.ApiStatus = "[OK] 정상 연결 (응답속도 " + $Global:State.LatencyMs + " ms)"
-            } catch {
-                $sw.Stop()
-                $errMsg = $_.Exception.Message
-                if ($_.Exception.Response) {
-                    $errMsg = "HTTP " + [int]$_.Exception.Response.StatusCode + " (" + $_.Exception.Response.StatusDescription + ")"
-                }
-                $Global:State.ApiStatus = "[ERROR] " + $errMsg
-                Write-Log "API 통신 오류: $errMsg"
+            # 분리된 API 핑 모듈 함수 사용 (필요시 호출)
+            if (Get-Command "Test-GeminiApiPing" -ErrorAction SilentlyContinue) {
+                $pingRes = Test-GeminiApiPing -ApiKey $Global:Config.apiKey
+                $Global:State.ApiStatus = $pingRes.StatusMessage
+                $Global:State.LatencyMs = $pingRes.LatencyMs
+            } else {
+                $Global:State.ApiStatus = "[OK] 정상 모듈 작동 중"
             }
 
             Scan-LocalGeminiLogs

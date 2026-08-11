@@ -27,22 +27,6 @@
 
 ---
 
-## 📐 스마트 업무시간 위험도 산출 공식
-
-* **실 업무시간 ($T_{work}$)**: 월~금요일 `09:00 ~ 18:00` (12:00~13:00 점심시간 제외 = 하루 실 업무시간 8시간 = 480분)
-* **남은 실 업무시간 ($T_{rem\_work}$)**: 현재 시각부터 당일 18:00까지의 남은 업무시간(분)
-* **토큰 소진 남은 시간 ($T_{deplete}$)**: $\text{남은 토큰량} \div \text{현재 분당 소모속도}(R_{TPM})$
-
-$$
-\begin{cases} 
-\text{🔴 빨간색 위험 (RED)} & : T_{deplete} \le T_{rem\_work} \quad \text{(업무시간 마감 전 100% 소진 예상)} \\
-\text{🟡 노란색 경고 (YELLOW)} & : P_{projected} \le 20\% \quad \text{(업무 마감 시 잔여 쿼터 20% 이하)} \\
-\text{🟢 기본 정상 (GREEN)} & : P_{projected} > 20\% \quad \text{(안전한 상태)}
-\end{cases}
-$$
-
----
-
 ## 🛠️ 프로젝트 파일 구조 (Project Architecture)
 
 ```
@@ -53,11 +37,14 @@ gemini-token-monitor/
 ├── Install-Startup.bat      # 1클릭 시작 프로그램 자동 등록 배치 파일
 ├── Uninstall-Startup.bat    # 1클릭 시작 프로그램 등록 해제 배치 파일
 ├── Run-Test.bat             # 디버그 테스트 실행 배치 파일
-├── Install-AutoStart.ps1    # 시작 프로그램 바로가기 생성 스크립트
-├── Uninstall-AutoStart.ps1  # 시작 프로그램 바로가기 제거 스크립트
 ├── config.json              # API Key 및 토큰 쿼터 한도 설정 파일
-└── modules/
-    └── GeminiApiPing.ps1    # 🧩 추후 재사용 가능한 독립 Gemini REST API 핑 모듈
+├── modules/
+│   └── GeminiApiPing.ps1    # 🧩 추후 재사용 가능한 독립 Gemini REST API 핑 모듈
+└── unused_archive/          # 📦 구 버전 보관용 레거시 스크립트 폴더
+    ├── README.md
+    ├── Install-AutoStart.ps1
+    ├── Uninstall-AutoStart.ps1
+    └── Fix-Encoding.vbs
 ```
 
 ---

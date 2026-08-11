@@ -1,5 +1,5 @@
-# ==============================================================================
-# Gemini Token Monitor (모듈 분리 최적화 & 로컬 로그 스캔 모드)
+﻿# ==============================================================================
+# Gemini Token Monitor (설정 파일 주석 보존 & 로컬 스캔 모드)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -21,7 +21,6 @@ $ConfigFile = Join-Path $ScriptDir "config.json"
 $LogFile = Join-Path $ScriptDir "monitor.log"
 $ApiModuleFile = Join-Path $ScriptDir "modules\GeminiApiPing.ps1"
 
-# API 분리 모듈 로드
 if (Test-Path $ApiModuleFile) {
     . $ApiModuleFile
 }
@@ -34,7 +33,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (모듈 분리 최적화버전) 시작"
+Write-Log "Gemini Token Monitor 실행"
 
 try {
     # 1. 설정 불러오기
@@ -252,7 +251,7 @@ try {
         }
     }
 
-    # 6. Gemini 상태 및 모듈 연동 갱신 함수
+    # 6. Gemini 상태 갱신 함수
     function Update-GeminiStatus {
         $Global:State.LastCheckTime = [DateTime]::Now
         $Global:State.NextCheckTime = $Global:State.LastCheckTime.AddMinutes($Global:Config.checkIntervalMinutes)
@@ -262,7 +261,6 @@ try {
             $Global:State.RiskLevel = "YELLOW"
             $Global:State.RiskDescription = "[경고] API 키 미설정"
         } else {
-            # 분리된 API 핑 모듈 함수 사용 (필요시 호출)
             if (Get-Command "Test-GeminiApiPing" -ErrorAction SilentlyContinue) {
                 $pingRes = Test-GeminiApiPing -ApiKey $Global:Config.apiKey
                 $Global:State.ApiStatus = $pingRes.StatusMessage
@@ -378,7 +376,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 8. 한글 API 키 설정 창
+    # 8. 주석을 보존하는 한글 API 키 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini API 키 및 쿼터 설정"
@@ -412,7 +410,17 @@ try {
         $btn.FlatStyle = "Flat"
         $btn.Add_Click({
             $Global:Config.apiKey = $txt.Text.Trim()
-            $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
+            if (Test-Path $ConfigFile) {
+                try {
+                    $rawObj = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                    $rawObj.apiKey = $Global:Config.apiKey
+                    $rawObj | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
+                } catch {
+                    $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
+                }
+            } else {
+                $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
+            }
             [System.Windows.Forms.MessageBox]::Show("API Key가 저장되었습니다.", "성공", "OK", "Information")
             $f.Close()
             Update-GeminiStatus

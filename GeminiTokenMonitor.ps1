@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (공식 Gemini 수치 59% & 82% 100% 정밀 동기화 보정 버전)
+# Gemini Token Monitor (아이콘 98% 버그 수정, 0토큰 초기화 보정, 전일/금일 소비속도 비교)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -19,6 +19,7 @@ public class NativeMethods {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ConfigFile = Join-Path $ScriptDir "config.json"
 $LogFile = Join-Path $ScriptDir "monitor.log"
+$HistoryFile = Join-Path $ScriptDir "daily_usage.json"
 $ApiModuleFile = Join-Path $ScriptDir "modules\GeminiApiPing.ps1"
 
 function Write-Log {
@@ -29,7 +30,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (공식 쿼터 정밀 동기화 모드) 시작"
+Write-Log "Gemini Token Monitor (전일대비 연동 & 버그수정 버전) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -38,14 +39,15 @@ try {
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 550000  # 228,452 사용 시 정확히 59% 잔여 산출 보정
-        weeklyQuotaTokens = 2000000       # 355,792 사용 시 정확히 82% 잔여 산출 보정
+        rolling5HourQuotaTokens = 550000
+        weeklyQuotaTokens = 2000000
         checkIntervalMinutes = 10
         workHours = @{
             startHour = 9
             endHour = 18
             lunchStartHour = 12
             lunchEndHour = 13
+            reset5Hour = 15 # 15:00 5시간 1차 리셋 시각
             workDays = @(1, 2, 3, 4, 5)
         }
     }
@@ -79,24 +81,76 @@ try {
         RequestCountToday = 0
         TokensUsed5Hours = 0
         TokensUsedWeekly = 0
+        YesterdayTokens = 0
+        YesterdayTPM = 0
         LastTokensUsed = 0
         RemainingTokens = $Global:Config.dailyQuotaTokens
         RemainingRPDPercent = 100
-        Remaining5HourPercent = 59
-        RemainingWeeklyPercent = 82
+        Remaining5HourPercent = 100
+        RemainingWeeklyPercent = 100
         BurnRateTPM = 0
         BurnRateTPH = 0
+        SpeedCompareStr = "전일 데이터 수집 중"
         RiskLevel = "GREEN"
         RiskDescription = "[정상] 안전 (소진 위험 없음)"
         WorkHoursDepletionWarning = "[안전] 금일 업무시간(09-18시) 내 소진 위험 없음"
         TimeUntilResetStr = "계산 중..."
-        TimeUntil5HourResetStr = "1시간 29분 후 100% 재생성 완료"
-        TimeUntilWeeklyResetStr = "4일 21시간 후 100% 재생성 완료"
+        TimeUntil15ResetStr = "계산 중..."
         LastActivityTime = [DateTime]::Now
         LastHIcon = [IntPtr]::Zero
     }
 
-    # 3. 업무시간 계산
+    # 3. 전일/금일 히스토리 로그 저장 및 로드
+    function Update-DailyHistory {
+        param([long]$TodayTokens, [int]$TodayTPM)
+        $todayStr = (Get-Date).ToString("yyyy-MM-dd")
+        $history = @{}
+        
+        if (Test-Path $HistoryFile) {
+            try {
+                $rawJson = Get-Content $HistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                foreach ($prop in $rawJson.PSObject.Properties) {
+                    $history[$prop.Name] = $prop.Value
+                }
+            } catch {}
+        }
+
+        # 오늘 데이터 갱신
+        $history[$todayStr] = @{
+            Tokens = $TodayTokens
+            TPM = $TodayTPM
+            Updated = (Get-Date).ToString("HH:mm:ss")
+        }
+
+        # 저장
+        try {
+            $history | ConvertTo-Json -Depth 5 | Set-Content $HistoryFile -Encoding UTF8
+        } catch {}
+
+        # 어제 날짜 데이터 조회
+        $yesterdayStr = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+        if ($history.ContainsKey($yesterdayStr)) {
+            $yData = $history[$yesterdayStr]
+            $Global:State.YesterdayTokens = [long]$yData.Tokens
+            $Global:State.YesterdayTPM = [int]$yData.TPM
+
+            if ($Global:State.YesterdayTPM -gt 0) {
+                $diff = $TodayTPM - $Global:State.YesterdayTPM
+                $diffPercent = [int](($diff / $Global:State.YesterdayTPM) * 100)
+                if ($diffPercent -ge 0) {
+                    $Global:State.SpeedCompareStr = "어제 대비 +" + $diffPercent + "% 증가 (어제: " + $Global:State.YesterdayTPM + " TPM)"
+                } else {
+                    $Global:State.SpeedCompareStr = "어제 대비 " + $diffPercent + "% 감소 (어제: " + $Global:State.YesterdayTPM + " TPM)"
+                }
+            } else {
+                $Global:State.SpeedCompareStr = "어제 소모량: " + $Global:State.YesterdayTokens.ToString("#,##0") + " Tokens"
+            }
+        } else {
+            $Global:State.SpeedCompareStr = "어제 데이터 없음 (오늘 기록 축적 중)"
+        }
+    }
+
+    # 4. 업무시간 (09시~18시, 15시 5시간 리셋) 계산
     function Get-RemainingWorkMinutes {
         $now = [DateTime]::Now
         if ($Global:Config.workHours.workDays -notcontains [int]$now.DayOfWeek) { return 0 }
@@ -117,7 +171,7 @@ try {
         return [math]::Max(0, [int]$mins)
     }
 
-    # 4. 정밀 보정 로컬 세션 스캔 엔진
+    # 5. 로컬 세션 로그 실시간 스캔 엔진 (하드코딩 더미 데이터 완전 제거)
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -192,13 +246,7 @@ try {
             }
         }
 
-        if ($tokensToday -eq 0) {
-            $tokensToday = 239688
-            $requestsToday = 3
-        }
-        if ($tokens5h -eq 0) { $tokens5h = 228452 }
-        if ($tokens7d -eq 0) { $tokens7d = 355792 }
-
+        # 하드코딩 대체 239,688 / 18,450 예전 테스트 더미 제거 -> 실제 0이면 0으로 정확히 출력!
         $deltaTokens = 0
         if ($Global:State.LastTokensUsed -gt 0 -and $tokensToday -ge $Global:State.LastTokensUsed) {
             $deltaTokens = $tokensToday - $Global:State.LastTokensUsed
@@ -210,28 +258,29 @@ try {
         $Global:State.TokensUsed5Hours = $tokens5h
         $Global:State.TokensUsedWeekly = $tokens7d
 
-        # 5시간 롤링 재생성 남은 시간 계산 (공식 1시간 29분 보정)
-        if ($latestActivity -gt [DateTime]::MinValue) {
-            $Global:State.LastActivityTime = $latestActivity
-        }
-        $reset5hTime = $Global:State.LastActivityTime.AddMinutes(89) # 1시간 29분 = 89분
-        if ($reset5hTime -gt $now) {
-            $span5h = $reset5hTime - $now
-            $Global:State.TimeUntil5HourResetStr = "" + $span5h.Hours + "시간 " + $span5h.Minutes + "분 후 100% 재생성 완료"
+        # 15시(오후 3시) 5시간 1차 리셋 남은 시간 계산
+        $reset15h = Get-Date -Hour $Global:Config.workHours.reset5Hour -Minute 0 -Second 0
+        if ($now -lt $reset15h) {
+            $span15 = $reset15h - $now
+            $Global:State.TimeUntil15ResetStr = "" + $span15.Hours + "시간 " + $span15.Minutes + "분 후 (15:00 5시간 1차 리셋)"
         } else {
-            $Global:State.TimeUntil5HourResetStr = "1시간 29분 후 100% 재생성 완료"
+            $endToday = Get-Date -Hour $Global:Config.workHours.endHour -Minute 0 -Second 0
+            if ($now -lt $endToday) {
+                $spanEnd = $endToday - $now
+                $Global:State.TimeUntil15ResetStr = "15:00 리셋 완료됨 (퇴근 18:00까지 " + $spanEnd.Hours + "시간 " + $spanEnd.Minutes + "분 남음)"
+            } else {
+                $Global:State.TimeUntil15ResetStr = "금일 업무시간 종료됨 (내일 09:00 재개)"
+            }
         }
 
-        $Global:State.TimeUntilWeeklyResetStr = "4일 21시간 후 100% 재생성 완료"
-
-        # 속도 계산
+        # 최근 분당/시간당 소모 속도 계산
         $Global:State.BurnRateTPM = [int]($deltaTokens / 10)
-        if ($Global:State.BurnRateTPM -eq 0 -and $tokensToday -gt 0) {
-            $Global:State.BurnRateTPM = Get-Random -Minimum 140 -Maximum 360
-        }
         $Global:State.BurnRateTPH = $Global:State.BurnRateTPM * 60
 
-        # 백분율 정밀 산출 (공식 Gemini 59% 및 82% 100% 일치)
+        # 전일대비 기록 갱신
+        Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
+
+        # 백분율 정밀 산출 (더미값 제외 실제 0이면 100% 표시)
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
@@ -246,7 +295,7 @@ try {
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
     }
 
-    # 5. 직사각형 배지 트레이 아이콘 생성 함수 (GDI 메모리 해제 적용)
+    # 6. 직사각형 배지 트레이 아이콘 생성 (하드코딩 98% 버그 수정 완료!)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -286,8 +335,8 @@ try {
             $textBrush = New-Object System.Drawing.SolidBrush($textColor)
             $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(160, 0, 0, 0))
 
+            # 고정된 98 하드코딩 완전 제거 -> 실제 전달된 퍼센트($Percent) 그대로 정확히 출력!
             $pText = "" + $Percent
-            if ($Percent -eq 100) { $pText = "98" }
 
             $textSize = $g.MeasureString($pText, $font)
             $posX = [int]((32 - $textSize.Width) / 2)
@@ -319,7 +368,7 @@ try {
         }
     }
 
-    # 6. Gemini 상태 갱신 함수
+    # 7. Gemini 상태 갱신 함수
     function Update-GeminiStatus {
         $Global:State.LastCheckTime = [DateTime]::Now
         $Global:State.NextCheckTime = $Global:State.LastCheckTime.AddMinutes($Global:Config.checkIntervalMinutes)
@@ -368,20 +417,20 @@ try {
         $Global:State.TimeUntilResetStr = "" + $span.Hours + "시간 " + $span.Minutes + "분 후 자정 리셋"
 
         if ($script:NotifyIcon) {
-            # 5시간 롤링 퍼센트(59%)를 보여주거나 일일 퍼센트(76%)를 선택 가능
-            $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
-            $tipText = "Gemini Token Monitor (5시간 " + $Global:State.Remaining5HourPercent + "% / 주간 " + $Global:State.RemainingWeeklyPercent + "%)"
+            # 실제 잔여 퍼센트($Global:State.RemainingRPDPercent)를 100% 동기화하여 출력
+            $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.RemainingRPDPercent -RiskLevel $Global:State.RiskLevel
+            $tipText = "Gemini Token Monitor (" + $Global:State.RemainingRPDPercent + "%) - " + $Global:State.RiskLevel
             if ($tipText.Length -gt 63) { $tipText = $tipText.Substring(0, 63) }
             $script:NotifyIcon.Text = $tipText
         }
     }
 
-    # 7. 현황 텍스트 창 (Gemini 공식 수치 59% & 82% 100% 정밀 보정)
+    # 8. 현황 텍스트 창 (전일 대비 속도 & 15시 리셋 연동)
     function Show-StatusDialog {
         Update-GeminiStatus
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
-        $f.Size = New-Object System.Drawing.Size(560, 560)
+        $f.Size = New-Object System.Drawing.Size(560, 580)
         $f.StartPosition = "CenterScreen"
         $f.FormBorderStyle = "FixedSingle"
         $f.MaximizeBox = $false
@@ -396,32 +445,32 @@ try {
         $tb.BackColor = [System.Drawing.Color]::FromArgb(35, 38, 45)
         $tb.ForeColor = [System.Drawing.Color]::FromArgb(230, 235, 240)
         $tb.Location = New-Object System.Drawing.Point(15, 15)
-        $tb.Size = New-Object System.Drawing.Size(515, 430)
+        $tb.Size = New-Object System.Drawing.Size(515, 450)
 
         $line1 = "============================================="
-        $line2 = "   Gemini API 토큰 모니터링 현황 (공식 쿼터 100% 동기화)"
+        $line2 = "   Gemini API 토큰 모니터링 현황 (전일대비 & 15시 리셋)"
         $line3 = "============================================="
         $line4 = "- API 연결 상태    : " + $Global:State.ApiStatus
         $line5 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss")
         $line6 = "- 다음 갱신 예정   : " + $Global:State.NextCheckTime.ToString("HH:mm:ss")
         $line7 = ""
         $line8 = "---------------------------------------------"
-        $line9 = "[ 실제 토큰 사용 현황 (공식 수치 정밀 보정) ]"
+        $line9 = "[ 실제 토큰 사용 현황 (로컬 세션 로그 연동) ]"
         $line10 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (요청 " + $Global:State.RequestCountToday + "회)"
         $line11 = "- 오늘 잔여 토큰   : " + $Global:State.RemainingTokens.ToString("#,##0") + " / " + $Global:Config.dailyQuotaTokens.ToString("#,##0") + " Tokens (" + $Global:State.RemainingRPDPercent + "%)"
         $line12 = "- 5시간 롤링 잔여  : " + $Global:State.Remaining5HourPercent + "% 잔여 (" + $Global:State.TokensUsed5Hours.ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line13 = "- 1주일 롤링 잔여  : " + $Global:State.RemainingWeeklyPercent + "% 잔여 (" + $Global:State.TokensUsedWeekly.ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
         $line14 = ""
         $line15 = "---------------------------------------------"
-        $line16 = "[ 토큰 소모 속도 및 위험도 평가 ]"
-        $line17 = "- 최근 분당 소모속도 (TPM) : 약 " + $Global:State.BurnRateTPM.ToString("#,##0") + " Tokens/min"
-        $line18 = "- 최근 시간당 소모속도 (TPH) : 약 " + $Global:State.BurnRateTPH.ToString("#,##0") + " Tokens/hour"
-        $line19 = "- 위험도 종합 등급         : " + $Global:State.RiskDescription
-        $line20 = ""
-        $line21 = "---------------------------------------------"
-        $line22 = "[ 쿼터 재생성 예정 시간 (공식 주기 완벽 연동) ]"
-        $line23 = "- 5시간 롤링 리셋  : " + $Global:State.TimeUntil5HourResetStr
-        $line24 = "- 1주일 주간 리셋  : " + $Global:State.TimeUntilWeeklyResetStr
+        $line16 = "[ 토큰 소모 속도 및 전일 대비 평가 ]"
+        $line17 = "- 금일 분당 소모속도 (TPM) : 약 " + $Global:State.BurnRateTPM.ToString("#,##0") + " Tokens/min"
+        $line18 = "- 금일 시간당 소모속도(TPH) : 약 " + $Global:State.BurnRateTPH.ToString("#,##0") + " Tokens/hour"
+        $line19 = "- 전일 대비 소모속도 비교   : " + $Global:State.SpeedCompareStr
+        $line20 = "- 위험도 종합 등급         : " + $Global:State.RiskDescription
+        $line21 = ""
+        $line22 = "---------------------------------------------"
+        $line23 = "[ 업무시간(09-18시, 15시 리셋) 연동 진단 ]"
+        $line24 = "- 15:00 5시간 리셋 : " + $Global:State.TimeUntil15ResetStr
         $line25 = "- 진단 결과        : " + $Global:State.WorkHoursDepletionWarning
         $line26 = "- 일일 쿼터 리셋   : " + $Global:State.TimeUntilResetStr
         $line27 = "============================================="
@@ -433,7 +482,7 @@ try {
 
         $btnOK = New-Object System.Windows.Forms.Button
         $btnOK.Text = "확인"
-        $btnOK.Location = New-Object System.Drawing.Point(430, 465)
+        $btnOK.Location = New-Object System.Drawing.Point(430, 485)
         $btnOK.Size = New-Object System.Drawing.Size(100, 32)
         $btnOK.ForeColor = [System.Drawing.Color]::White
         $btnOK.BackColor = [System.Drawing.Color]::FromArgb(52, 152, 219)
@@ -444,7 +493,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 8. 설정 창
+    # 9. 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini API 키 및 쿼터 설정"
@@ -498,9 +547,9 @@ try {
         $f.ShowDialog()
     }
 
-    # 9. NotifyIcon 생성
+    # 10. NotifyIcon 생성
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-    $script:NotifyIcon.Icon = New-BatteryIcon -Percent 59 -RiskLevel "GREEN"
+    $script:NotifyIcon.Icon = New-BatteryIcon -Percent 100 -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
     $script:NotifyIcon.Visible = $true
 
@@ -529,7 +578,7 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 10. 10분 타이머
+    # 11. 10분 타이머
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
     $timer.Add_Tick({ Update-GeminiStatus })
@@ -538,7 +587,7 @@ try {
     Update-GeminiStatus
     Write-Log "NotifyIcon 초기화 완료"
 
-    # 11. ApplicationContext 메시지 루프 구동
+    # 12. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext
     [System.Windows.Forms.Application]::Run($appContext)
 

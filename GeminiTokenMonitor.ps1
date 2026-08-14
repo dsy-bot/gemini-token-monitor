@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (중복 합산 방지 엔진 및 표준 1M 쿼터 재보정 반영)
+# Gemini Token Monitor (5시간 1M / 주간 10M 논리적 쿼터 비율 적용)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -30,17 +30,17 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (중복 합산 방지 및 1M 재보정) 시작"
+Write-Log "Gemini Token Monitor (5시간 1M / 주간 10M 비율 반영) 시작"
 
 try {
-    # 1. 설정 불러오기
+    # 1. 설정 불러오기 (5시간 1,000,000 토큰 / 주간 10,000,000 토큰)
     $Global:Config = @{
         apiKey = ""
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 1000000 # 5시간 롤링 100만 표준 쿼터
-        weeklyQuotaTokens = 1000000       # 주간 롤링 100만 표준 쿼터
+        rolling5HourQuotaTokens = 1000000 # 5시간 단기 폭주 한도 (100만 토큰)
+        weeklyQuotaTokens = 10000000      # 1주일 7일 전체 쿼터 풀 (1,000만 토큰)
         weeklyResetDay = 1
         weeklyResetHour = 9
         checkIntervalMinutes = 10
@@ -210,7 +210,7 @@ try {
                             $firstActivityToday = $fileTime
                         }
 
-                        # 1) 오늘 소모 토큰 스캔 (파일 내 누적 totalTokens 중 최댓값 단 하나만 취함!)
+                        # 1) 오늘 소모 토큰 스캔 (최댓값 추출 중복 방지)
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -241,7 +241,7 @@ try {
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 스캔 (최댓값 단일 추출)
+                        # 2) 최근 5시간 롤링 스캔 (최댓값 추출 중복 방지)
                         if ($fileTime -ge $start5HoursAgo) {
                             if ($file.Extension -ne ".db") {
                                 $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -305,18 +305,18 @@ try {
         # 전일대비 기록 갱신
         Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
 
-        # 백분율 정밀 산출
+        # 백분율 실측 100% 동기화 산출
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
         $Global:State.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-        # 5시간 롤링 (중복 합산 제거 후 100만 기준 정밀 산출)
+        # 5시간 롤링 (1,000,000 토큰 = 5시간 폭주 방지 단기 한도)
         $max5h = $Global:Config.rolling5HourQuotaTokens
         $rem5h = [math]::Max(0, ($max5h - $tokens5h))
         $Global:State.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
 
-        # 1주일 롤링
+        # 1주일 롤링 (10,000,000 토큰 = 7일 전체 한도 -> 5시간 100만 쓰더라도 주간 10% 소모로 7일간 넉넉하게 사용!)
         $maxWk = $Global:Config.weeklyQuotaTokens
         $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 520000)))
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)

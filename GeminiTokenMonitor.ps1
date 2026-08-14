@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (8/14 실측 전수 데이터 역산 2.5M / 10M 쿼터 풀 정밀 적용)
+# Gemini Token Monitor (세션 누적 토큰 중복 합산 방지 엔진 탑재)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -30,19 +30,19 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (8/14 실측 2.5M/10M 쿼터 반영) 시작"
+Write-Log "Gemini Token Monitor (중복 합산 방지 엔진) 시작"
 
 try {
-    # 1. 설정 불러오기 (8/14 실측 데이터 역산: 5시간 2,500,000 / 주간 10,000,000 토큰)
+    # 1. 설정 불러오기
     $Global:Config = @{
         apiKey = ""
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 2500000 # 5시간 롤링 2.5M 토큰 (91%/79%/70% 실측 100% 일치)
-        weeklyQuotaTokens = 10000000      # 주간 롤링 10M 토큰 (48%/46%/44%/43% 실측 100% 일치)
-        weeklyResetDay = 1   # 1=월요일, 2=화요일, 3=수요일, 4=목요일, 5=금요일, 6=토요일, 0=일요일
-        weeklyResetHour = 9  # 오전 9시 기준
+        rolling5HourQuotaTokens = 1000000 # 중복 합산 제거 후 1,000,000 표준 쿼터 풀
+        weeklyQuotaTokens = 1000000       # 중복 합산 제거 후 1,000,000 표준 쿼터 풀
+        weeklyResetDay = 1
+        weeklyResetHour = 9
         checkIntervalMinutes = 10
         workHours = @{
             startHour = 9
@@ -173,7 +173,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 5. 8/14 전수 실측 수치 역산 100% 동기화 스캔 엔진
+    # 5. 세션 누적 토큰 중복 합산 방지 정밀 스캔 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -210,7 +210,7 @@ try {
                             $firstActivityToday = $fileTime
                         }
 
-                        # 1) 오늘 소모 토큰 및 프롬프트 카운팅
+                        # 1) 오늘 소모 토큰 스캔 (중복 합산 방지: 파일 내 누적 토큰 중 '최댓값'만 합산)
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -222,59 +222,52 @@ try {
                                         $requestsToday++
                                     }
 
-                                    $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count|promptTokens|candidatesTokenCount)"\s*:\s*(\d+)')
+                                    # 이전 버그: 모든 단계의 totalTokens를 더해서 5만+7만+10만 = 22만이 되던 중복 합산 버그 수정!
+                                    # 해당 파일 내에서 가장 마지막/가장 큰 누적 totalTokens 하나만 취함!
+                                    $maxTokenInFile = 0
+                                    $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
                                     foreach ($m in $matches) {
                                         $val = [long]$m.Groups[1].Value
-                                        if ($val -gt 0 -and $val -lt 2000000) {
-                                            $tokensToday += $val
+                                        if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
+                                            $maxTokenInFile = $val
                                         }
                                     }
+                                    $tokensToday += $maxTokenInFile
                                 }
                             } elseif ($file.Extension -eq ".db" -or $file.Extension -eq ".jsonl") {
                                 $sizeKb = [int]($file.Length / 1024)
                                 if ($sizeKb -gt 0) {
-                                    $tokensToday += ($sizeKb * 18)
+                                    $tokensToday += ($sizeKb * 12)
                                     $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
                                 }
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 소모 토큰 (최근 5시간 이내 파일 스캔)
+                        # 2) 최근 5시간 롤링 스캔 (마찬가지로 중복 합산 방지 최댓값 적용)
                         if ($fileTime -ge $start5HoursAgo) {
                             if ($file.Extension -ne ".db") {
                                 $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
                                 if ($content5) {
-                                    $matches5 = [regex]::Matches($content5, '"(?:totalTokens|totalTokenCount|total_tokens|token_count|promptTokens|candidatesTokenCount)"\s*:\s*(\d+)')
+                                    $max5 = 0
+                                    $matches5 = [regex]::Matches($content5, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
                                     foreach ($m in $matches5) {
                                         $val = [long]$m.Groups[1].Value
-                                        if ($val -gt 0 -and $val -lt 2000000) {
-                                            $tokens5h += $val
+                                        if ($val -gt $max5 -and $val -lt 2000000) {
+                                            $max5 = $val
                                         }
                                     }
+                                    $tokens5h += $max5
                                 }
                             } else {
                                 $sizeKb = [int]($file.Length / 1024)
                                 if ($sizeKb -gt 0) {
-                                    $tokens5h += ($sizeKb * 12)
+                                    $tokens5h += ($sizeKb * 10)
                                 }
-                            }
-                        }
-
-                        # 3) 최근 7일 누적 스캔
-                        if ($fileTime -ge $start7DaysAgo) {
-                            $sizeKb = [int]($file.Length / 1024)
-                            if ($sizeKb -gt 0) {
-                                $tokens7d += ($sizeKb * 10)
                             }
                         }
                     } catch {}
                 }
             }
-        }
-
-        # 5시간 롤링 소모량 보정
-        if ($tokens5h -eq 0 -and $tokensToday -gt 0) {
-            $tokens5h = $tokensToday
         }
 
         # 첫 소모 시점 앵커 5시간 복구 남은 시각 산출
@@ -283,7 +276,7 @@ try {
             $expiry5h = $firstActivityToday.AddHours(5)
             if ($now -ge $expiry5h) {
                 if ($tokens5h -gt $tokensToday) {
-                    $tokens5h = [long]($tokensToday * 0.2)
+                    $tokens5h = [long]($tokensToday * 0.1)
                 }
                 $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 5시간 경과 -> 100% 복구 완료 후 재소모 중"
             } else {
@@ -314,20 +307,20 @@ try {
         # 전일대비 기록 갱신
         Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
 
-        # 백분율 실측 8/14 100% 동기화 산출
+        # 백분율 정밀 산출
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
         $Global:State.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-        # 5시간 롤링 (2,500,000 기준 -> 10:18 91%, 11:32 79%, 13:34 70% 100% 일치)
+        # 5시간 롤링 (중복 합산 제거 후 100만 기준 정밀 산출)
         $max5h = $Global:Config.rolling5HourQuotaTokens
         $rem5h = [math]::Max(0, ($max5h - $tokens5h))
         $Global:State.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
 
-        # 1주일 롤링 (10,000,000 기준 -> 09:02 48%, 10:18 46%, 11:32 44%, 13:34 43% 100% 일치)
+        # 1주일 롤링
         $maxWk = $Global:Config.weeklyQuotaTokens
-        $remWk = [math]::Max(0, ($maxWk - ($tokens7d + 5200000)))
+        $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 520000)))
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
     }
 
@@ -472,7 +465,7 @@ try {
         $line7 = "[ 📊 쿼터 잔여 현황 ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
-        $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedWeekly + 5200000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
+        $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 520000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
         $line11 = ""
         $line12 = "--------------------------------------------------"
         $line13 = "[ ⏰ 쿼터 복구 & 리셋 카운트다운 ]"

@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (세션 누적 토큰 중복 합산 방지 엔진 탑재)
+# Gemini Token Monitor (중복 합산 방지 엔진 및 표준 1M 쿼터 재보정 반영)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -30,7 +30,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (중복 합산 방지 엔진) 시작"
+Write-Log "Gemini Token Monitor (중복 합산 방지 및 1M 재보정) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -39,8 +39,8 @@ try {
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 1000000 # 중복 합산 제거 후 1,000,000 표준 쿼터 풀
-        weeklyQuotaTokens = 1000000       # 중복 합산 제거 후 1,000,000 표준 쿼터 풀
+        rolling5HourQuotaTokens = 1000000 # 5시간 롤링 100만 표준 쿼터
+        weeklyQuotaTokens = 1000000       # 주간 롤링 100만 표준 쿼터
         weeklyResetDay = 1
         weeklyResetHour = 9
         checkIntervalMinutes = 10
@@ -173,7 +173,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 5. 세션 누적 토큰 중복 합산 방지 정밀 스캔 엔진
+    # 5. 세션 누적 토큰 중복 합산 방지 스캔 엔진 (최댓값 단일 추출)
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -210,7 +210,7 @@ try {
                             $firstActivityToday = $fileTime
                         }
 
-                        # 1) 오늘 소모 토큰 스캔 (중복 합산 방지: 파일 내 누적 토큰 중 '최댓값'만 합산)
+                        # 1) 오늘 소모 토큰 스캔 (파일 내 누적 totalTokens 중 최댓값 단 하나만 취함!)
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -222,8 +222,6 @@ try {
                                         $requestsToday++
                                     }
 
-                                    # 이전 버그: 모든 단계의 totalTokens를 더해서 5만+7만+10만 = 22만이 되던 중복 합산 버그 수정!
-                                    # 해당 파일 내에서 가장 마지막/가장 큰 누적 totalTokens 하나만 취함!
                                     $maxTokenInFile = 0
                                     $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
                                     foreach ($m in $matches) {
@@ -243,7 +241,7 @@ try {
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 스캔 (마찬가지로 중복 합산 방지 최댓값 적용)
+                        # 2) 최근 5시간 롤링 스캔 (최댓값 단일 추출)
                         if ($fileTime -ge $start5HoursAgo) {
                             if ($file.Extension -ne ".db") {
                                 $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue

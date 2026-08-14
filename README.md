@@ -7,30 +7,25 @@
 
 ## ✨ 핵심 기능 및 메커니즘
 
-1. **🔒 0% 네트워크 오프라인 전용 스캔**:
-   - 외부 REST API 호출 없이 사용자 PC 로컬 세션 로그(`~/.gemini`, `%APPDATA%/gemini` 등)만 실시간으로 안전하게 스캔합니다.
-   - 네트워크 트래픽 0%, 메모리 사용량 ~12MB 수준으로 극도로 경량화되어 있습니다.
+1. **📜 1~3일 세부 토큰 소모 로그 연동 (`token_history.json`)**:
+   - 스캔된 모든 대화 세션의 타임스탬프와 토큰 수치를 3일간(72시간) 자동으로 적재 관리합니다. 72시간이 지난 옛 기록은 자동으로 정돈 삭제됩니다.
 
-2. **📐 실측 소모% 변화량 역산 5:1 쿼터 비율 엔진**:
-   - Google Gemini 공식 화면 실측 데이터(5시간 5% 감소 당 주간 1% 감소)를 수학적으로 역산 보정하였습니다.
+2. **⏰ 초기화 시점 수동 지정 & 이전 토큰 자동 차감 무시**:
+   - **`config.json`** 또는 UI 설정 창에서 5시간/주간 초기화까지 **남은 시간**을 수동으로 입력할 수 있습니다.
+   - `override5HourRemainingMinutes`: 5시간 초기화까지 남은 **분(minute)** 입력 (예: `90` 입력 시 1시간 30분 후 초기화 시점 자동 계산).
+   - `overrideWeeklyRemainingHours`: 주간 초기화까지 남은 **시간(hour)** 입력 (예: `48` 입력 시 48시간 후 주간 리셋 시점 계산).
+   - 초기화 시점이 설정되면 로그 데이터를 기반으로 **해당 초기화 시점 이전 토큰은 롤링 합산에서 자동 차감 무시**되어 수치가 정확하게 보정됩니다.
+
+3. **🔒 0% 네트워크 오프라인 전용 스캔**:
+   - 외부 REST API 호출 없이 사용자 PC 로컬 세션 로그(`~/.gemini`, `%APPDATA%/gemini` 등)만 실시간으로 안전하게 스캔합니다. (메모리 ~12MB)
+
+4. **📐 실측 소모% 변화량 역산 5:1 쿼터 비율 엔진**:
+   - Google Gemini 공식 화면 실측 데이터(5시간 5% 감소 당 주간 1% 감소)를 수학적으로 역산 반영하였습니다.
    - **5시간 롤링 쿼터 풀**: `1,000,000 Tokens` (5시간 단기 폭주 제어용 한도)
    - **1주일 롤링 쿼터 풀**: `5,000,000 Tokens` (7일 전체 쿼터 예산 한도)
-   - 5시간 동안 단기 소모를 많이 하더라도 주간 쿼터는 넉넉히 유지되어 7일 내내 안정적으로 작업할 수 있습니다.
 
-3. **⏰ 첫 소모 시점 앵커(First-Token Anchor) 롤링 복구**:
-   - 당일 첫 프롬프트 소모 시각(예: 09:20 AM)을 앵커 기준점으로 지정하여, 5시간 경과 후(`14:20 PM`) 만료 토큰이 자동으로 롤링 합산에서 차감되어 **100% 완충 복구되는 남은 시간**을 직관적으로 보여줍니다.
-
-4. **🧩 세션 누적 토큰 중복 합산 방지 (Deduplication Engine)**:
-   - 대화 세션 로그 파일(`transcript.jsonl`) 내부의 단계별 누적 토큰 중 **최신 최댓값(`MaxTokenInFile`) 단 하나만 추출**하여 첫 질문 시 토큰 수치가 뻥튀기되던 현상을 원천 차단했습니다.
-
-5. **📅 주간 쿼터 리셋 요일 & 시각 사용자 지정**:
-   - `config.json`에서 주간 리셋 요일(`weeklyResetDay`)과 시각(`weeklyResetHour`)을 자유롭게 지정할 수 있습니다 (기본값: 매주 월요일 09:00).
-
-6. **📊 전일 대비 소모속도 비교 (`daily_usage.json`)**:
-   - 일자별 소모 기록을 자동 적재하여 어제 소모속도(TPM) 대비 **오늘 소모속도 증감률(%)**을 실시간으로 비교 표기합니다.
-
-7. **⚡ 초경량 & 메모리 누수 방지**:
-   - Windows GDI 아이콘 핸들 자동 해제(`DestroyIcon`) 및 가비지 컬렉션을 적용하여 메모리 12MB 상태를 일정하게 유지합니다.
+5. **🧩 세션 누적 토큰 중복 합산 방지 (Deduplication Engine)**:
+   - 대화 세션 로그 파일(`transcript.jsonl`) 내부의 단계별 누적 토큰 중 **최신 최댓값(`MaxTokenInFile`) 단 하나만 추출**하여 첫 질문 시 토큰 뻥튀기 현상을 원천 차단했습니다.
 
 ---
 
@@ -39,14 +34,14 @@
 ```text
 gemini-token-monitor/
 ├── GeminiTokenMonitor.ps1   # 메인 모니터링 및 WinForms 트레이 GUI 스크립트
-├── config.json              # 모니터링 쿼터 및 주간 리셋 요일/시각 설정 파일
+├── config.json              # 모니터링 쿼터, 수동 초기화 시점 및 주간 리셋 요일 설정
+├── token_history.json       # 1~3일(72시간) 세부 토큰 소모 타임스탬프 로그
+├── daily_usage.json         # 일자별 누적 토큰 및 소모속도 히스토리
 ├── Launch-Silent.vbs        # 검은 콘솔 창 없이 백그라운드 무소음 실행 스크립트
 ├── Run-Test.bat             # 즉시 테스트 실행 배치 파일
 ├── Install-Startup.bat      # Windows 윈도우 시작 프로그램 등록 스크립트
-├── Uninstall-Startup.bat    # Windows 윈도우 시작 프로그램 등록 해제 스크립트
-├── modules/
-│   └── GeminiApiPing.ps1    # REST API 핑 헬스체크 모듈 (선택적 활성화)
-└── unused_archive/          # 미사용 및 레거시 스크립트 아카이브
+└── modules/
+    └── GeminiApiPing.ps1    # REST API 핑 헬스체크 모듈 (선택적 활성화)
 ```
 
 ---
@@ -55,21 +50,21 @@ gemini-token-monitor/
 
 ```json
 {
-  "enableApiPing": false,
   "dailyQuotaTokens": 1000000,
   "rolling5HourQuotaTokens": 1000000,
   "weeklyQuotaTokens": 5000000,
+  "override5HourRemainingMinutes": null,
+  "overrideWeeklyRemainingHours": null,
   "weeklyResetDay": 1,
   "weeklyResetHour": 9,
   "checkIntervalMinutes": 10
 }
 ```
 
+- `override5HourRemainingMinutes`: 5시간 초기화 남은시간(분 단위, 예: `90` 설정 시 1시간 30분 후 초기화, `null`이면 자동 스캔)
+- `overrideWeeklyRemainingHours`: 주간 초기화 남은시간(시간 단위, 예: `48` 설정 시 48시간 후 리셋, `null`이면 자동 스캔)
 - `weeklyResetDay`: 주간 쿼터 리셋 요일 지정 (`1`=월, `2`=화, `3`=수, `4`=목, `5`=금, `6`=토, `0`=일)
 - `weeklyResetHour`: 주간 쿼터 리셋 시각 지정 (`0`~`23`시, 기본값 `9` = 오전 9시)
-- `rolling5HourQuotaTokens`: 5시간 단기 폭주 롤링 풀 (기본 `1,000,000` 토큰)
-- `weeklyQuotaTokens`: 1주일 롤링 총 풀 (기본 `5,000,000` 토큰)
-- `enableApiPing`: API 핑 활성화 여부 (`false`: 네트워크 0% 오프라인 전용 모드)
 
 ---
 
@@ -78,6 +73,4 @@ gemini-token-monitor/
 1. **무소음 백그라운드 실행**:
    - `Launch-Silent.vbs` 파일을 더블클릭합니다.
 2. **트레이 아이콘 사용**:
-   - 작업 표시줄 트레이 영역의 **[숫자 배지 아이콘]**을 더블클릭하거나 우클릭하여 **[현 상태 보기]**를 누릅니다.
-3. **윈도우 시작 프로그램 등록**:
-   - `Install-Startup.bat`를 실행하면 부팅 시 자동 구동됩니다.
+   - 트레이 아이콘 우클릭 $\rightarrow$ **[초기화 시점 및 설정]**에서 남은 시간(분/시간)을 직접 입력하고 저장하면 로그를 기반으로 수치가 즉시 보정됩니다.

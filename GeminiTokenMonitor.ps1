@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (실측 5시간 vs 주간 소모% 5:1 비율 정밀 칼리브레이션)
+# Gemini Token Monitor (1~3일 세부 로그 연동 및 초기화 시점 수동 지정/자동 차감 엔진)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -20,6 +20,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ConfigFile = Join-Path $ScriptDir "config.json"
 $LogFile = Join-Path $ScriptDir "monitor.log"
 $HistoryFile = Join-Path $ScriptDir "daily_usage.json"
+$TokenHistoryFile = Join-Path $ScriptDir "token_history.json"
 $ApiModuleFile = Join-Path $ScriptDir "modules\GeminiApiPing.ps1"
 
 function Write-Log {
@@ -30,17 +31,19 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (실측 5시간/주간 5:1 비율 정밀 반영) 시작"
+Write-Log "Gemini Token Monitor (로그 연동 & 초기화 시점 수동 보정) 시작"
 
 try {
-    # 1. 설정 불러오기 (실측 5시간 9% 감소 시 주간 2% 감소 -> 5:1 비율 1M/5M 풀)
+    # 1. 설정 불러오기
     $Global:Config = @{
         apiKey = ""
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 1000000 # 5시간 롤링 100만 토큰
-        weeklyQuotaTokens = 5000000       # 주간 롤링 500만 토큰 (실측 5:1 소모 비율 100% 일치)
+        rolling5HourQuotaTokens = 1000000
+        weeklyQuotaTokens = 5000000
+        override5HourRemainingMinutes = $null
+        overrideWeeklyRemainingHours = $null
         weeklyResetDay = 1
         weeklyResetHour = 9
         checkIntervalMinutes = 10
@@ -63,6 +66,12 @@ try {
             if ($json.dailyQuotaTokens) { $Global:Config.dailyQuotaTokens = [long]$json.dailyQuotaTokens }
             if ($json.rolling5HourQuotaTokens) { $Global:Config.rolling5HourQuotaTokens = [long]$json.rolling5HourQuotaTokens }
             if ($json.weeklyQuotaTokens) { $Global:Config.weeklyQuotaTokens = [long]$json.weeklyQuotaTokens }
+            if ($null -ne $json.override5HourRemainingMinutes -and "$($json.override5HourRemainingMinutes)" -ne "") {
+                $Global:Config.override5HourRemainingMinutes = [int]$json.override5HourRemainingMinutes
+            }
+            if ($null -ne $json.overrideWeeklyRemainingHours -and "$($json.overrideWeeklyRemainingHours)" -ne "") {
+                $Global:Config.overrideWeeklyRemainingHours = [int]$json.overrideWeeklyRemainingHours
+            }
             if ($null -ne $json.weeklyResetDay) { $Global:Config.weeklyResetDay = [int]$json.weeklyResetDay }
             if ($null -ne $json.weeklyResetHour) { $Global:Config.weeklyResetHour = [int]$json.weeklyResetHour }
             if ($json.checkIntervalMinutes) { $Global:Config.checkIntervalMinutes = [int]$json.checkIntervalMinutes }
@@ -97,15 +106,58 @@ try {
         SpeedCompareStr = "전일 데이터 수집 중"
         RiskLevel = "GREEN"
         RiskDescription = "[정상] 안전 (소진 위험 없음)"
-        WorkHoursDepletionWarning = "[안전] 금일 업무시간(09-18시) 내 소진 위험 없음"
         TimeUntilResetStr = "계산 중..."
         TimeUntilWeeklyResetStr = "계산 중..."
-        TimeUntil5HourResetStr = "첫 소모 시각 기준 계산 중"
+        TimeUntil5HourResetStr = "계산 중..."
         FirstTokenTimeToday = [DateTime]::MinValue
         LastHIcon = [IntPtr]::Zero
     }
 
-    # 3. 전일/금일 히스토리 로그 저장 및 로드
+    # 3. 1~3일 세부 토큰 소모 로그 작성 및 보관 함수 (token_history.json)
+    function Record-TokenHistoryLog {
+        param(
+            [DateTime]$Timestamp,
+            [string]$FilePath,
+            [long]$Tokens,
+            [int]$Requests
+        )
+        $historyList = @()
+        if (Test-Path $TokenHistoryFile) {
+            try {
+                $raw = Get-Content $TokenHistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($raw) { $historyList = [System.Collections.ArrayList]@($raw) }
+            } catch {}
+        } else {
+            $historyList = New-Object System.Collections.ArrayList
+        }
+
+        # 3일 이전 오래된 로그 자동 정리 (72시간 이전 로그 삭제)
+        $cutoff = [DateTime]::Now.AddDays(-3)
+        $filtered = New-Object System.Collections.ArrayList
+        foreach ($item in $historyList) {
+            try {
+                $itemTime = [DateTime]::Parse($item.Timestamp)
+                if ($itemTime -ge $cutoff) {
+                    $null = $filtered.Add($item)
+                }
+            } catch {}
+        }
+
+        # 신규 항목 추가
+        $entry = [pscustomobject]@{
+            Timestamp = $Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
+            File = (Split-Path -Leaf $FilePath)
+            Tokens = $Tokens
+            Requests = $Requests
+        }
+        $null = $filtered.Add($entry)
+
+        try {
+            $filtered | ConvertTo-Json -Depth 5 | Set-Content $TokenHistoryFile -Encoding UTF8
+        } catch {}
+    }
+
+    # 4. 전일/금일 히스토리 로그 저장 및 로드
     function Update-DailyHistory {
         param([long]$TodayTokens, [int]$TodayTPM)
         $todayStr = (Get-Date).ToString("yyyy-MM-dd")
@@ -152,9 +204,16 @@ try {
         }
     }
 
-    # 4. 주간 리셋 카운트다운 계산
+    # 5. 주간 리셋 카운트다운 계산
     function Get-WeeklyResetCountdown {
         param([int]$ResetDay = 1, [int]$ResetHour = 9)
+        
+        if ($null -ne $Global:Config.overrideWeeklyRemainingHours) {
+            $remHours = [int]$Global:Config.overrideWeeklyRemainingHours
+            $targetReset = [DateTime]::Now.AddHours($remHours)
+            return "[수동 지정] " + $targetReset.ToString("yyyy-MM-dd HH:mm") + " 리셋 예정 (" + $remHours + "시간 남음)"
+        }
+
         $now = [DateTime]::Now
         $dayNames = @("일", "월", "화", "수", "목", "금", "토")
         $dayName = $dayNames[$ResetDay]
@@ -173,11 +232,24 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 5. 실측 5시간 vs 주간 소모% 5:1 비율 정밀 스캔 엔진
+    # 6. 실측 로그 스캔 & 초기화 시점 이전 토큰 자동 차감 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
+
+        # 5시간 롤링 시작점 계산 (설정 파일의 override5HourRemainingMinutes 반영)
         $start5HoursAgo = $now.AddHours(-5)
+        $is5HourOverridden = $false
+        $target5HourReset = [DateTime]::MinValue
+
+        if ($null -ne $Global:Config.override5HourRemainingMinutes) {
+            $remMins = [int]$Global:Config.override5HourRemainingMinutes
+            $target5HourReset = $now.AddMinutes($remMins)
+            # 초기화 시점이 target5HourReset이면, 해당 롤링 5시간 구간의 시작점은 target5HourReset - 5시간!
+            $start5HoursAgo = $target5HourReset.AddHours(-5)
+            $is5HourOverridden = $true
+        }
+
         $start7DaysAgo = $today.AddDays(-7)
 
         $tokensToday = 0
@@ -210,17 +282,15 @@ try {
                             $firstActivityToday = $fileTime
                         }
 
-                        # 1) 오늘 소모 토큰 스캔 (최댓값 단일 추출)
+                        # 1) 오늘 소모 토큰 스캔 (오늘 자정 이전 토큰은 완전 무시!)
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
                                 if ($content) {
                                     $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
-                                    if ($reqMatches.Count -gt 0) {
-                                        $requestsToday += $reqMatches.Count
-                                    } else {
-                                        $requestsToday++
-                                    }
+                                    $reqCount = 1
+                                    if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
+                                    $requestsToday += $reqCount
 
                                     $maxTokenInFile = 0
                                     $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
@@ -231,6 +301,9 @@ try {
                                         }
                                     }
                                     $tokensToday += $maxTokenInFile
+
+                                    # 1~3일 세부 토큰 로그 기록
+                                    Record-TokenHistoryLog -Timestamp $fileTime -FilePath $file.FullName -Tokens $maxTokenInFile -Requests $reqCount
                                 }
                             } elseif ($file.Extension -eq ".db" -or $file.Extension -eq ".jsonl") {
                                 $sizeKb = [int]($file.Length / 1024)
@@ -241,7 +314,7 @@ try {
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 스캔 (최댓값 단일 추출)
+                        # 2) 최근 5시간 롤링 스캔 (초기화 시점 이전 토큰 자동 차감 무시!)
                         if ($fileTime -ge $start5HoursAgo) {
                             if ($file.Extension -ne ".db") {
                                 $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -268,11 +341,17 @@ try {
             }
         }
 
-        # 첫 소모 시점 앵커 5시간 복구 남은 시각 산출
-        if ($firstActivityToday -lt [DateTime]::MaxValue) {
+        # 5시간 롤링 초기화 남은 시각 및 앵커 산출
+        if ($is5HourOverridden) {
+            $spanMins = [int]($target5HourReset - $now).TotalMinutes
+            $h = [math]::Floor($spanMins / 60)
+            $m = $spanMins % 60
+            $Global:State.TimeUntil5HourResetStr = "[수동 지정] " + $target5HourReset.ToString("HH:mm") + " 복구 완료 예정 (" + $h + "시간 " + $m + "분 남음)"
+        } elseif ($firstActivityToday -lt [DateTime]::MaxValue) {
             $Global:State.FirstTokenTimeToday = $firstActivityToday
             $expiry5h = $firstActivityToday.AddHours(5)
             if ($now -ge $expiry5h) {
+                # 5시간 경과 후에는 이전 토큰이 만료되어 롤링 통에서 완전 무시 차감!
                 if ($tokens5h -gt $tokensToday) {
                     $tokens5h = [long]($tokensToday * 0.1)
                 }
@@ -305,24 +384,24 @@ try {
         # 전일대비 기록 갱신
         Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
 
-        # 백분율 실측 5:1 비율 정밀 산출
+        # 백분율 정밀 산출
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
         $Global:State.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-        # 5시간 롤링 (1,000,000 토큰 기준 -> 10:18 91%, 11:32 79%, 13:34 70% 100% 일치!)
+        # 5시간 롤링
         $max5h = $Global:Config.rolling5HourQuotaTokens
         $rem5h = [math]::Max(0, ($max5h - $tokens5h))
         $Global:State.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
 
-        # 1주일 롤링 (5,000,000 토큰 기준 -> 09:02 48%, 10:18 46%, 11:32 44%, 13:34 43% 100% 일치!)
+        # 1주일 롤링
         $maxWk = $Global:Config.weeklyQuotaTokens
         $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 2600000)))
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
     }
 
-    # 6. 직사각형 배지 트레이 아이콘 생성 함수 (GDI 메모리 해제 적용)
+    # 7. 직사각형 배지 트레이 아이콘 생성 함수 (GDI 메모리 해제 적용)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -394,7 +473,7 @@ try {
         }
     }
 
-    # 7. Gemini 상태 갱신 함수
+    # 8. Gemini 상태 갱신 함수
     function Update-GeminiStatus {
         $Global:State.LastCheckTime = [DateTime]::Now
         $Global:State.NextCheckTime = $Global:State.LastCheckTime.AddMinutes($Global:Config.checkIntervalMinutes)
@@ -432,7 +511,7 @@ try {
         }
     }
 
-    # 8. 현황 텍스트 창
+    # 9. 현황 텍스트 창
     function Show-StatusDialog {
         Update-GeminiStatus
         $f = New-Object System.Windows.Forms.Form
@@ -495,44 +574,95 @@ try {
         $f.ShowDialog()
     }
 
-    # 9. 설정 창
+    # 10. 초기화 시점 수동 입력 지원 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
-        $f.Text = "Gemini API 키 및 쿼터 설정"
-        $f.Size = New-Object System.Drawing.Size(440, 220)
+        $f.Text = "Gemini 모니터링 & 초기화 시점 설정"
+        $f.Size = New-Object System.Drawing.Size(480, 360)
         $f.StartPosition = "CenterScreen"
         $f.FormBorderStyle = "FixedSingle"
         $f.MaximizeBox = $false
         $f.BackColor = [System.Drawing.Color]::FromArgb(25, 27, 32)
 
-        $lbl = New-Object System.Windows.Forms.Label
-        $lbl.Text = "Google Gemini API Key 입력 (선택사항):"
-        $lbl.Font = New-Object System.Drawing.Font("맑은 고딕", 10)
-        $lbl.ForeColor = [System.Drawing.Color]::White
-        $lbl.Location = New-Object System.Drawing.Point(20, 20)
-        $lbl.AutoSize = $true
-        $f.Controls.Add($lbl)
+        # 1) API Key
+        $lblKey = New-Object System.Windows.Forms.Label
+        $lblKey.Text = "API Key (선택사항):"
+        $lblKey.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $lblKey.ForeColor = [System.Drawing.Color]::White
+        $lblKey.Location = New-Object System.Drawing.Point(20, 15)
+        $lblKey.AutoSize = $true
+        $f.Controls.Add($lblKey)
 
-        $txt = New-Object System.Windows.Forms.TextBox
-        $txt.Text = $Global:Config.apiKey
-        $txt.Location = New-Object System.Drawing.Point(20, 50)
-        $txt.Size = New-Object System.Drawing.Size(380, 25)
-        $f.Controls.Add($txt)
+        $txtKey = New-Object System.Windows.Forms.TextBox
+        $txtKey.Text = $Global:Config.apiKey
+        $txtKey.Location = New-Object System.Drawing.Point(20, 40)
+        $txtKey.Size = New-Object System.Drawing.Size(420, 25)
+        $f.Controls.Add($txtKey)
 
+        # 2) 5시간 초기화 남은시간(분) 수동 지정
+        $lbl5h = New-Object System.Windows.Forms.Label
+        $lbl5h.Text = "⚡ 5시간 초기화 남은시간 (분 단위 수동입력, 비워두면 자동):"
+        $lbl5h.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $lbl5h.ForeColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
+        $lbl5h.Location = New-Object System.Drawing.Point(20, 80)
+        $lbl5h.AutoSize = $true
+        $f.Controls.Add($lbl5h)
+
+        $txt5h = New-Object System.Windows.Forms.TextBox
+        if ($null -ne $Global:Config.override5HourRemainingMinutes) {
+            $txt5h.Text = "" + $Global:Config.override5HourRemainingMinutes
+        }
+        $txt5h.Location = New-Object System.Drawing.Point(20, 105)
+        $txt5h.Size = New-Object System.Drawing.Size(420, 25)
+        $f.Controls.Add($txt5h)
+
+        # 3) 주간 초기화 남은시간(시간) 수동 지정
+        $lblWk = New-Object System.Windows.Forms.Label
+        $lblWk.Text = "📅 주간 초기화 남은시간 (시간 단위 수동입력, 비워두면 자동):"
+        $lblWk.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $lblWk.ForeColor = [System.Drawing.Color]::FromArgb(52, 152, 219)
+        $lblWk.Location = New-Object System.Drawing.Point(20, 145)
+        $lblWk.AutoSize = $true
+        $f.Controls.Add($lblWk)
+
+        $txtWk = New-Object System.Windows.Forms.TextBox
+        if ($null -ne $Global:Config.overrideWeeklyRemainingHours) {
+            $txtWk.Text = "" + $Global:Config.overrideWeeklyRemainingHours
+        }
+        $txtWk.Location = New-Object System.Drawing.Point(20, 170)
+        $txtWk.Size = New-Object System.Drawing.Size(420, 25)
+        $f.Controls.Add($txtWk)
+
+        # 4) 저장 버튼
         $btn = New-Object System.Windows.Forms.Button
-        $btn.Text = "저장 및 확인"
-        $btn.Font = New-Object System.Drawing.Font("맑은 고딕", 9)
-        $btn.Location = New-Object System.Drawing.Point(280, 110)
-        $btn.Size = New-Object System.Drawing.Size(120, 32)
+        $btn.Text = "저장 및 재스캔"
+        $btn.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5, [System.Drawing.FontStyle]::Bold)
+        $btn.Location = New-Object System.Drawing.Point(300, 230)
+        $btn.Size = New-Object System.Drawing.Size(140, 36)
         $btn.ForeColor = [System.Drawing.Color]::White
         $btn.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
         $btn.FlatStyle = "Flat"
         $btn.Add_Click({
-            $Global:Config.apiKey = $txt.Text.Trim()
+            $Global:Config.apiKey = $txtKey.Text.Trim()
+
+            if ([string]::IsNullOrWhiteSpace($txt5h.Text.Trim())) {
+                $Global:Config.override5HourRemainingMinutes = $null
+            } else {
+                try { $Global:Config.override5HourRemainingMinutes = [int]$txt5h.Text.Trim() } catch {}
+            }
+
+            if ([string]::IsNullOrWhiteSpace($txtWk.Text.Trim())) {
+                $Global:Config.overrideWeeklyRemainingHours = $null
+            } else {
+                try { $Global:Config.overrideWeeklyRemainingHours = [int]$txtWk.Text.Trim() } catch {}
+            }
+
             if (Test-Path $ConfigFile) {
                 try {
                     $rawObj = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
                     $rawObj.apiKey = $Global:Config.apiKey
+                    $rawObj.override5HourRemainingMinutes = $Global:Config.override5HourRemainingMinutes
+                    $rawObj.overrideWeeklyRemainingHours = $Global:Config.overrideWeeklyRemainingHours
                     $rawObj | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
                 } catch {
                     $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
@@ -540,7 +670,8 @@ try {
             } else {
                 $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
             }
-            [System.Windows.Forms.MessageBox]::Show("설정이 성공적으로 저장되었습니다.", "성공", "OK", "Information")
+
+            [System.Windows.Forms.MessageBox]::Show("초기화 시점 설정이 성공적으로 저장되었습니다.`n로그 데이터를 기반으로 수치가 보정됩니다.", "성공", "OK", "Information")
             $f.Close()
             Update-GeminiStatus
         })
@@ -549,7 +680,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 10. NotifyIcon 생성
+    # 11. NotifyIcon 생성
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = New-BatteryIcon -Percent 100 -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
@@ -565,7 +696,7 @@ try {
 
     $menu.Items.Add("-") | Out-Null
 
-    $mSettings = $menu.Items.Add("설정 (Settings)")
+    $mSettings = $menu.Items.Add("초기화 시점 및 설정 (Settings)")
     $mSettings.Add_Click({ Show-SettingsDialog })
 
     $menu.Items.Add("-") | Out-Null
@@ -580,7 +711,7 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 11. 10분 타이머
+    # 12. 10분 타이머
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
     $timer.Add_Tick({ Update-GeminiStatus })
@@ -589,7 +720,7 @@ try {
     Update-GeminiStatus
     Write-Log "NotifyIcon 초기화 완료"
 
-    # 12. ApplicationContext 메시지 루프 구동
+    # 13. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext
     [System.Windows.Forms.Application]::Run($appContext)
 

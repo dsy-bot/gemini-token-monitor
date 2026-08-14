@@ -1,5 +1,6 @@
 # Gemini Token Monitor - Git Ignore Rules
 config.json
 monitor.log
+daily_usage.json
 *.tmp
 *.log

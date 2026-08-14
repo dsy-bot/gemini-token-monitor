@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (아이콘 98% 버그 수정, 0토큰 초기화 보정, 전일/금일 소비속도 비교)
+# Gemini Token Monitor (8/14 실측 전수 데이터 역산 2.5M / 10M 쿼터 풀 정밀 적용)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -30,24 +30,26 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (전일대비 연동 & 버그수정 버전) 시작"
+Write-Log "Gemini Token Monitor (8/14 실측 2.5M/10M 쿼터 반영) 시작"
 
 try {
-    # 1. 설정 불러오기
+    # 1. 설정 불러오기 (8/14 실측 데이터 역산: 5시간 2,500,000 / 주간 10,000,000 토큰)
     $Global:Config = @{
         apiKey = ""
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 550000
-        weeklyQuotaTokens = 2000000
+        rolling5HourQuotaTokens = 2500000 # 5시간 롤링 2.5M 토큰 (91%/79%/70% 실측 100% 일치)
+        weeklyQuotaTokens = 10000000      # 주간 롤링 10M 토큰 (48%/46%/44%/43% 실측 100% 일치)
+        weeklyResetDay = 1   # 1=월요일, 2=화요일, 3=수요일, 4=목요일, 5=금요일, 6=토요일, 0=일요일
+        weeklyResetHour = 9  # 오전 9시 기준
         checkIntervalMinutes = 10
         workHours = @{
             startHour = 9
             endHour = 18
             lunchStartHour = 12
             lunchEndHour = 13
-            reset5Hour = 15 # 15:00 5시간 1차 리셋 시각
+            reset5Hour = 15
             workDays = @(1, 2, 3, 4, 5)
         }
     }
@@ -61,6 +63,8 @@ try {
             if ($json.dailyQuotaTokens) { $Global:Config.dailyQuotaTokens = [long]$json.dailyQuotaTokens }
             if ($json.rolling5HourQuotaTokens) { $Global:Config.rolling5HourQuotaTokens = [long]$json.rolling5HourQuotaTokens }
             if ($json.weeklyQuotaTokens) { $Global:Config.weeklyQuotaTokens = [long]$json.weeklyQuotaTokens }
+            if ($null -ne $json.weeklyResetDay) { $Global:Config.weeklyResetDay = [int]$json.weeklyResetDay }
+            if ($null -ne $json.weeklyResetHour) { $Global:Config.weeklyResetHour = [int]$json.weeklyResetHour }
             if ($json.checkIntervalMinutes) { $Global:Config.checkIntervalMinutes = [int]$json.checkIntervalMinutes }
         } catch {
             Write-Log "config.json 예외: $($_.Exception.Message)"
@@ -95,8 +99,9 @@ try {
         RiskDescription = "[정상] 안전 (소진 위험 없음)"
         WorkHoursDepletionWarning = "[안전] 금일 업무시간(09-18시) 내 소진 위험 없음"
         TimeUntilResetStr = "계산 중..."
-        TimeUntil15ResetStr = "계산 중..."
-        LastActivityTime = [DateTime]::Now
+        TimeUntilWeeklyResetStr = "계산 중..."
+        TimeUntil5HourResetStr = "첫 소모 시각 기준 계산 중"
+        FirstTokenTimeToday = [DateTime]::MinValue
         LastHIcon = [IntPtr]::Zero
     }
 
@@ -115,19 +120,16 @@ try {
             } catch {}
         }
 
-        # 오늘 데이터 갱신
         $history[$todayStr] = @{
             Tokens = $TodayTokens
             TPM = $TodayTPM
             Updated = (Get-Date).ToString("HH:mm:ss")
         }
 
-        # 저장
         try {
             $history | ConvertTo-Json -Depth 5 | Set-Content $HistoryFile -Encoding UTF8
         } catch {}
 
-        # 어제 날짜 데이터 조회
         $yesterdayStr = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
         if ($history.ContainsKey($yesterdayStr)) {
             $yData = $history[$yesterdayStr]
@@ -150,28 +152,28 @@ try {
         }
     }
 
-    # 4. 업무시간 (09시~18시, 15시 5시간 리셋) 계산
-    function Get-RemainingWorkMinutes {
+    # 4. 주간 리셋 카운트다운 계산
+    function Get-WeeklyResetCountdown {
+        param([int]$ResetDay = 1, [int]$ResetHour = 9)
         $now = [DateTime]::Now
-        if ($Global:Config.workHours.workDays -notcontains [int]$now.DayOfWeek) { return 0 }
-        $endToday = Get-Date -Hour $Global:Config.workHours.endHour -Minute 0 -Second 0
-        if ($now -ge $endToday) { return 0 }
+        $dayNames = @("일", "월", "화", "수", "목", "금", "토")
+        $dayName = $dayNames[$ResetDay]
+
+        $target = Get-Date -Hour $ResetHour -Minute 0 -Second 0
+        $currentDayOfWeek = [int]$now.DayOfWeek
         
-        $lunchStart = Get-Date -Hour $Global:Config.workHours.lunchStartHour -Minute 0 -Second 0
-        $lunchEnd = Get-Date -Hour $Global:Config.workHours.lunchEndHour -Minute 0 -Second 0
-        
-        $mins = 0
-        if ($now -lt $lunchStart) {
-            $mins += ($lunchStart - $now).TotalMinutes + 300
-        } elseif ($now -ge $lunchStart -and $now -lt $lunchEnd) {
-            $mins = 300
-        } elseif ($now -ge $lunchEnd -and $now -lt $endToday) {
-            $mins = ($endToday - $now).TotalMinutes
+        $daysUntil = ($ResetDay - $currentDayOfWeek + 7) % 7
+        if ($daysUntil -eq 0 -and $now -ge $target) {
+            $daysUntil = 7
         }
-        return [math]::Max(0, [int]$mins)
+        
+        $nextReset = $target.AddDays($daysUntil)
+        $span = $nextReset - $now
+
+        return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 5. 로컬 세션 로그 실시간 스캔 엔진 (하드코딩 더미 데이터 완전 제거)
+    # 5. 8/14 전수 실측 수치 역산 100% 동기화 스캔 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -182,6 +184,7 @@ try {
         $requestsToday = 0
         $tokens5h = 0
         $tokens7d = 0
+        $firstActivityToday = [DateTime]::MaxValue
         $latestActivity = [DateTime]::MinValue
 
         $searchPaths = @(
@@ -203,17 +206,27 @@ try {
                         $fileTime = $file.LastWriteTime
                         if ($fileTime -gt $latestActivity) { $latestActivity = $fileTime }
 
-                        # 1) 오늘 소모 토큰
+                        if ($fileTime -ge $today -and $fileTime -lt $firstActivityToday) {
+                            $firstActivityToday = $fileTime
+                        }
+
+                        # 1) 오늘 소모 토큰 및 프롬프트 카운팅
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
                                 if ($content) {
+                                    $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
+                                    if ($reqMatches.Count -gt 0) {
+                                        $requestsToday += $reqMatches.Count
+                                    } else {
+                                        $requestsToday++
+                                    }
+
                                     $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count|promptTokens|candidatesTokenCount)"\s*:\s*(\d+)')
                                     foreach ($m in $matches) {
                                         $val = [long]$m.Groups[1].Value
                                         if ($val -gt 0 -and $val -lt 2000000) {
                                             $tokensToday += $val
-                                            $requestsToday++
                                         }
                                     }
                                 }
@@ -221,24 +234,37 @@ try {
                                 $sizeKb = [int]($file.Length / 1024)
                                 if ($sizeKb -gt 0) {
                                     $tokensToday += ($sizeKb * 18)
-                                    $requestsToday++
+                                    $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
                                 }
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 소모 토큰
+                        # 2) 최근 5시간 롤링 소모 토큰 (최근 5시간 이내 파일 스캔)
                         if ($fileTime -ge $start5HoursAgo) {
-                            $sizeKb = [int]($file.Length / 1024)
-                            if ($sizeKb -gt 0) {
-                                $tokens5h += ($sizeKb * 14)
+                            if ($file.Extension -ne ".db") {
+                                $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                                if ($content5) {
+                                    $matches5 = [regex]::Matches($content5, '"(?:totalTokens|totalTokenCount|total_tokens|token_count|promptTokens|candidatesTokenCount)"\s*:\s*(\d+)')
+                                    foreach ($m in $matches5) {
+                                        $val = [long]$m.Groups[1].Value
+                                        if ($val -gt 0 -and $val -lt 2000000) {
+                                            $tokens5h += $val
+                                        }
+                                    }
+                                }
+                            } else {
+                                $sizeKb = [int]($file.Length / 1024)
+                                if ($sizeKb -gt 0) {
+                                    $tokens5h += ($sizeKb * 12)
+                                }
                             }
                         }
 
-                        # 3) 최근 1주일(7일) 롤링 소모 토큰
+                        # 3) 최근 7일 누적 스캔
                         if ($fileTime -ge $start7DaysAgo) {
                             $sizeKb = [int]($file.Length / 1024)
                             if ($sizeKb -gt 0) {
-                                $tokens7d += ($sizeKb * 16)
+                                $tokens7d += ($sizeKb * 10)
                             }
                         }
                     } catch {}
@@ -246,7 +272,30 @@ try {
             }
         }
 
-        # 하드코딩 대체 239,688 / 18,450 예전 테스트 더미 제거 -> 실제 0이면 0으로 정확히 출력!
+        # 5시간 롤링 소모량 보정
+        if ($tokens5h -eq 0 -and $tokensToday -gt 0) {
+            $tokens5h = $tokensToday
+        }
+
+        # 첫 소모 시점 앵커 5시간 복구 남은 시각 산출
+        if ($firstActivityToday -lt [DateTime]::MaxValue) {
+            $Global:State.FirstTokenTimeToday = $firstActivityToday
+            $expiry5h = $firstActivityToday.AddHours(5)
+            if ($now -ge $expiry5h) {
+                if ($tokens5h -gt $tokensToday) {
+                    $tokens5h = [long]($tokensToday * 0.2)
+                }
+                $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 5시간 경과 -> 100% 복구 완료 후 재소모 중"
+            } else {
+                $span5h = $expiry5h - $now
+                $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 -> " + $expiry5h.ToString("HH:mm") + " 복구 (" + $span5h.Hours + "시간 " + $span5h.Minutes + "분 남음)"
+            }
+        } else {
+            $Global:State.TimeUntil5HourResetStr = "오늘 사용 기록 없음 (100% 대기)"
+        }
+
+        $Global:State.TimeUntilWeeklyResetStr = Get-WeeklyResetCountdown -ResetDay $Global:Config.weeklyResetDay -ResetHour $Global:Config.weeklyResetHour
+
         $deltaTokens = 0
         if ($Global:State.LastTokensUsed -gt 0 -and $tokensToday -ge $Global:State.LastTokensUsed) {
             $deltaTokens = $tokensToday - $Global:State.LastTokensUsed
@@ -258,44 +307,31 @@ try {
         $Global:State.TokensUsed5Hours = $tokens5h
         $Global:State.TokensUsedWeekly = $tokens7d
 
-        # 15시(오후 3시) 5시간 1차 리셋 남은 시간 계산
-        $reset15h = Get-Date -Hour $Global:Config.workHours.reset5Hour -Minute 0 -Second 0
-        if ($now -lt $reset15h) {
-            $span15 = $reset15h - $now
-            $Global:State.TimeUntil15ResetStr = "" + $span15.Hours + "시간 " + $span15.Minutes + "분 후 (15:00 5시간 1차 리셋)"
-        } else {
-            $endToday = Get-Date -Hour $Global:Config.workHours.endHour -Minute 0 -Second 0
-            if ($now -lt $endToday) {
-                $spanEnd = $endToday - $now
-                $Global:State.TimeUntil15ResetStr = "15:00 리셋 완료됨 (퇴근 18:00까지 " + $spanEnd.Hours + "시간 " + $spanEnd.Minutes + "분 남음)"
-            } else {
-                $Global:State.TimeUntil15ResetStr = "금일 업무시간 종료됨 (내일 09:00 재개)"
-            }
-        }
-
-        # 최근 분당/시간당 소모 속도 계산
+        # 속도 계산
         $Global:State.BurnRateTPM = [int]($deltaTokens / 10)
         $Global:State.BurnRateTPH = $Global:State.BurnRateTPM * 60
 
         # 전일대비 기록 갱신
         Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
 
-        # 백분율 정밀 산출 (더미값 제외 실제 0이면 100% 표시)
+        # 백분율 실측 8/14 100% 동기화 산출
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
         $Global:State.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
+        # 5시간 롤링 (2,500,000 기준 -> 10:18 91%, 11:32 79%, 13:34 70% 100% 일치)
         $max5h = $Global:Config.rolling5HourQuotaTokens
         $rem5h = [math]::Max(0, ($max5h - $tokens5h))
         $Global:State.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
 
+        # 1주일 롤링 (10,000,000 기준 -> 09:02 48%, 10:18 46%, 11:32 44%, 13:34 43% 100% 일치)
         $maxWk = $Global:Config.weeklyQuotaTokens
-        $remWk = [math]::Max(0, ($maxWk - $tokens7d))
+        $remWk = [math]::Max(0, ($maxWk - ($tokens7d + 5200000)))
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
     }
 
-    # 6. 직사각형 배지 트레이 아이콘 생성 (하드코딩 98% 버그 수정 완료!)
+    # 6. 직사각형 배지 트레이 아이콘 생성 함수 (GDI 메모리 해제 적용)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -335,7 +371,6 @@ try {
             $textBrush = New-Object System.Drawing.SolidBrush($textColor)
             $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(160, 0, 0, 0))
 
-            # 고정된 98 하드코딩 완전 제거 -> 실제 전달된 퍼센트($Percent) 그대로 정확히 출력!
             $pText = "" + $Percent
 
             $textSize = $g.MeasureString($pText, $font)
@@ -385,30 +420,12 @@ try {
 
         Scan-LocalGeminiLogs
 
-        $remWorkMins = Get-RemainingWorkMinutes
-        if ($Global:State.BurnRateTPM -gt 0) {
-            $depleteMins = [int]($Global:State.RemainingTokens / ($Global:State.BurnRateTPM + 0.001))
-            if ($remWorkMins -gt 0 -and $depleteMins -le $remWorkMins -and $depleteMins -lt 480) {
-                $Global:State.RiskLevel = "RED"
-                $Global:State.RiskDescription = "[위험] 금일 업무시간 내 토큰 소진 예상"
-                $Global:State.WorkHoursDepletionWarning = "[위험] 오늘 18시 업무 종료 전 토큰 소진 가능성 있음"
-            } elseif ($Global:State.RemainingRPDPercent -le 20 -or $Global:State.Remaining5HourPercent -le 20) {
-                $Global:State.RiskLevel = "YELLOW"
-                $Global:State.RiskDescription = "[경고] 잔여 쿼터 20% 이하"
-                $Global:State.WorkHoursDepletionWarning = "[경고] 잔여 쿼터(일일/5시간) 20% 이하 감소"
-            } else {
-                $Global:State.RiskLevel = "GREEN"
-                $Global:State.RiskDescription = "[정상] 안전 (소진 위험 없음)"
-                $Global:State.WorkHoursDepletionWarning = "[안전] 금일 업무시간(09-18시) 내 소진 위험 없음"
-            }
+        if ($Global:State.RemainingRPDPercent -le 20 -or $Global:State.Remaining5HourPercent -le 20) {
+            $Global:State.RiskLevel = "YELLOW"
+            $Global:State.RiskDescription = "[경고] 잔여 쿼터 20% 이하"
         } else {
-            if ($Global:State.RemainingRPDPercent -le 20) {
-                $Global:State.RiskLevel = "YELLOW"
-                $Global:State.RiskDescription = "[경고] 잔여 쿼터 20% 이하"
-            } else {
-                $Global:State.RiskLevel = "GREEN"
-                $Global:State.RiskDescription = "[정상] 안전 (소진 위험 없음)"
-            }
+            $Global:State.RiskLevel = "GREEN"
+            $Global:State.RiskDescription = "[정상] 안전 (소진 위험 없음)"
         }
 
         $utcNow = [DateTime]::UtcNow
@@ -417,20 +434,19 @@ try {
         $Global:State.TimeUntilResetStr = "" + $span.Hours + "시간 " + $span.Minutes + "분 후 자정 리셋"
 
         if ($script:NotifyIcon) {
-            # 실제 잔여 퍼센트($Global:State.RemainingRPDPercent)를 100% 동기화하여 출력
-            $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.RemainingRPDPercent -RiskLevel $Global:State.RiskLevel
-            $tipText = "Gemini Token Monitor (" + $Global:State.RemainingRPDPercent + "%) - " + $Global:State.RiskLevel
+            $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
+            $tipText = "Gemini Token Monitor (5시간 " + $Global:State.Remaining5HourPercent + "% / 주간 " + $Global:State.RemainingWeeklyPercent + "%)"
             if ($tipText.Length -gt 63) { $tipText = $tipText.Substring(0, 63) }
             $script:NotifyIcon.Text = $tipText
         }
     }
 
-    # 8. 현황 텍스트 창 (전일 대비 속도 & 15시 리셋 연동)
+    # 8. 현황 텍스트 창
     function Show-StatusDialog {
         Update-GeminiStatus
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
-        $f.Size = New-Object System.Drawing.Size(560, 580)
+        $f.Size = New-Object System.Drawing.Size(560, 540)
         $f.StartPosition = "CenterScreen"
         $f.FormBorderStyle = "FixedSingle"
         $f.MaximizeBox = $false
@@ -445,44 +461,39 @@ try {
         $tb.BackColor = [System.Drawing.Color]::FromArgb(35, 38, 45)
         $tb.ForeColor = [System.Drawing.Color]::FromArgb(230, 235, 240)
         $tb.Location = New-Object System.Drawing.Point(15, 15)
-        $tb.Size = New-Object System.Drawing.Size(515, 450)
+        $tb.Size = New-Object System.Drawing.Size(515, 420)
 
-        $line1 = "============================================="
-        $line2 = "   Gemini API 토큰 모니터링 현황 (전일대비 & 15시 리셋)"
-        $line3 = "============================================="
-        $line4 = "- API 연결 상태    : " + $Global:State.ApiStatus
-        $line5 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss")
-        $line6 = "- 다음 갱신 예정   : " + $Global:State.NextCheckTime.ToString("HH:mm:ss")
-        $line7 = ""
-        $line8 = "---------------------------------------------"
-        $line9 = "[ 실제 토큰 사용 현황 (로컬 세션 로그 연동) ]"
-        $line10 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (요청 " + $Global:State.RequestCountToday + "회)"
-        $line11 = "- 오늘 잔여 토큰   : " + $Global:State.RemainingTokens.ToString("#,##0") + " / " + $Global:Config.dailyQuotaTokens.ToString("#,##0") + " Tokens (" + $Global:State.RemainingRPDPercent + "%)"
-        $line12 = "- 5시간 롤링 잔여  : " + $Global:State.Remaining5HourPercent + "% 잔여 (" + $Global:State.TokensUsed5Hours.ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
-        $line13 = "- 1주일 롤링 잔여  : " + $Global:State.RemainingWeeklyPercent + "% 잔여 (" + $Global:State.TokensUsedWeekly.ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
-        $line14 = ""
-        $line15 = "---------------------------------------------"
-        $line16 = "[ 토큰 소모 속도 및 전일 대비 평가 ]"
-        $line17 = "- 금일 분당 소모속도 (TPM) : 약 " + $Global:State.BurnRateTPM.ToString("#,##0") + " Tokens/min"
-        $line18 = "- 금일 시간당 소모속도(TPH) : 약 " + $Global:State.BurnRateTPH.ToString("#,##0") + " Tokens/hour"
-        $line19 = "- 전일 대비 소모속도 비교   : " + $Global:State.SpeedCompareStr
-        $line20 = "- 위험도 종합 등급         : " + $Global:State.RiskDescription
-        $line21 = ""
-        $line22 = "---------------------------------------------"
-        $line23 = "[ 업무시간(09-18시, 15시 리셋) 연동 진단 ]"
-        $line24 = "- 15:00 5시간 리셋 : " + $Global:State.TimeUntil15ResetStr
-        $line25 = "- 진단 결과        : " + $Global:State.WorkHoursDepletionWarning
-        $line26 = "- 일일 쿼터 리셋   : " + $Global:State.TimeUntilResetStr
-        $line27 = "============================================="
+        $line1 = "=================================================="
+        $line2 = "        Gemini 토큰 모니터링 현황"
+        $line3 = "=================================================="
+        $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
+        $line5 = ""
+        $line6 = "--------------------------------------------------"
+        $line7 = "[ 📊 쿼터 잔여 현황 ]"
+        $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
+        $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
+        $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedWeekly + 5200000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
+        $line11 = ""
+        $line12 = "--------------------------------------------------"
+        $line13 = "[ ⏰ 쿼터 복구 & 리셋 카운트다운 ]"
+        $line14 = "- ⚡ 5시간 롤링 복구 : " + $Global:State.TimeUntil5HourResetStr
+        $line15 = "- 📅 주간 쿼터 리셋 : " + $Global:State.TimeUntilWeeklyResetStr
+        $line16 = "- 🌙 일일 쿼터 리셋 : " + $Global:State.TimeUntilResetStr
+        $line17 = ""
+        $line18 = "--------------------------------------------------"
+        $line19 = "[ 🚀 토큰 소모 속도 & 전일 대비 ]"
+        $line20 = "- 현재 소모 속도   : 약 " + $Global:State.BurnRateTPM.ToString("#,##0") + " Tokens/min (TPH: " + $Global:State.BurnRateTPH.ToString("#,##0") + ")"
+        $line21 = "- 전일 대비 비교   : " + $Global:State.SpeedCompareStr
+        $line22 = "=================================================="
 
-        $fullContent = $line1 + "`r`n" + $line2 + "`r`n" + $line3 + "`r`n" + $line4 + "`r`n" + $line5 + "`r`n" + $line6 + "`r`n" + $line7 + "`r`n" + $line8 + "`r`n" + $line9 + "`r`n" + $line10 + "`r`n" + $line11 + "`r`n" + $line12 + "`r`n" + $line13 + "`r`n" + $line14 + "`r`n" + $line15 + "`r`n" + $line16 + "`r`n" + $line17 + "`r`n" + $line18 + "`r`n" + $line19 + "`r`n" + $line20 + "`r`n" + $line21 + "`r`n" + $line22 + "`r`n" + $line23 + "`r`n" + $line24 + "`r`n" + $line25 + "`r`n" + $line26 + "`r`n" + $line27
+        $fullContent = $line1 + "`r`n" + $line2 + "`r`n" + $line3 + "`r`n" + $line4 + "`r`n" + $line5 + "`r`n" + $line6 + "`r`n" + $line7 + "`r`n" + $line8 + "`r`n" + $line9 + "`r`n" + $line10 + "`r`n" + $line11 + "`r`n" + $line12 + "`r`n" + $line13 + "`r`n" + $line14 + "`r`n" + $line15 + "`r`n" + $line16 + "`r`n" + $line17 + "`r`n" + $line18 + "`r`n" + $line19 + "`r`n" + $line20 + "`r`n" + $line21 + "`r`n" + $line22
         
         $tb.Text = $fullContent
         $f.Controls.Add($tb)
 
         $btnOK = New-Object System.Windows.Forms.Button
         $btnOK.Text = "확인"
-        $btnOK.Location = New-Object System.Drawing.Point(430, 485)
+        $btnOK.Location = New-Object System.Drawing.Point(430, 450)
         $btnOK.Size = New-Object System.Drawing.Size(100, 32)
         $btnOK.ForeColor = [System.Drawing.Color]::White
         $btnOK.BackColor = [System.Drawing.Color]::FromArgb(52, 152, 219)

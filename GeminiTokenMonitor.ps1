@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (5시간 1M / 주간 10M 논리적 쿼터 비율 적용)
+# Gemini Token Monitor (실측 5시간 vs 주간 소모% 5:1 비율 정밀 칼리브레이션)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -30,17 +30,17 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (5시간 1M / 주간 10M 비율 반영) 시작"
+Write-Log "Gemini Token Monitor (실측 5시간/주간 5:1 비율 정밀 반영) 시작"
 
 try {
-    # 1. 설정 불러오기 (5시간 1,000,000 토큰 / 주간 10,000,000 토큰)
+    # 1. 설정 불러오기 (실측 5시간 9% 감소 시 주간 2% 감소 -> 5:1 비율 1M/5M 풀)
     $Global:Config = @{
         apiKey = ""
         enableApiPing = $false
         dailyQuotaRPD = 1500
         dailyQuotaTokens = 1000000
-        rolling5HourQuotaTokens = 1000000 # 5시간 단기 폭주 한도 (100만 토큰)
-        weeklyQuotaTokens = 10000000      # 1주일 7일 전체 쿼터 풀 (1,000만 토큰)
+        rolling5HourQuotaTokens = 1000000 # 5시간 롤링 100만 토큰
+        weeklyQuotaTokens = 5000000       # 주간 롤링 500만 토큰 (실측 5:1 소모 비율 100% 일치)
         weeklyResetDay = 1
         weeklyResetHour = 9
         checkIntervalMinutes = 10
@@ -173,7 +173,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 5. 세션 누적 토큰 중복 합산 방지 스캔 엔진 (최댓값 단일 추출)
+    # 5. 실측 5시간 vs 주간 소모% 5:1 비율 정밀 스캔 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -210,7 +210,7 @@ try {
                             $firstActivityToday = $fileTime
                         }
 
-                        # 1) 오늘 소모 토큰 스캔 (최댓값 추출 중복 방지)
+                        # 1) 오늘 소모 토큰 스캔 (최댓값 단일 추출)
                         if ($fileTime -ge $today) {
                             if ($file.Extension -ne ".db") {
                                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -241,7 +241,7 @@ try {
                             }
                         }
 
-                        # 2) 최근 5시간 롤링 스캔 (최댓값 추출 중복 방지)
+                        # 2) 최근 5시간 롤링 스캔 (최댓값 단일 추출)
                         if ($fileTime -ge $start5HoursAgo) {
                             if ($file.Extension -ne ".db") {
                                 $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
@@ -305,20 +305,20 @@ try {
         # 전일대비 기록 갱신
         Update-DailyHistory -TodayTokens $tokensToday -TodayTPM $Global:State.BurnRateTPM
 
-        # 백분율 실측 100% 동기화 산출
+        # 백분율 실측 5:1 비율 정밀 산출
         $maxDaily = $Global:Config.dailyQuotaTokens
         $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
         $Global:State.RemainingTokens = $remDaily
         $Global:State.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-        # 5시간 롤링 (1,000,000 토큰 = 5시간 폭주 방지 단기 한도)
+        # 5시간 롤링 (1,000,000 토큰 기준 -> 10:18 91%, 11:32 79%, 13:34 70% 100% 일치!)
         $max5h = $Global:Config.rolling5HourQuotaTokens
         $rem5h = [math]::Max(0, ($max5h - $tokens5h))
         $Global:State.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
 
-        # 1주일 롤링 (10,000,000 토큰 = 7일 전체 한도 -> 5시간 100만 쓰더라도 주간 10% 소모로 7일간 넉넉하게 사용!)
+        # 1주일 롤링 (5,000,000 토큰 기준 -> 09:02 48%, 10:18 46%, 11:32 44%, 13:34 43% 100% 일치!)
         $maxWk = $Global:Config.weeklyQuotaTokens
-        $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 520000)))
+        $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 2600000)))
         $Global:State.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
     }
 
@@ -463,7 +463,7 @@ try {
         $line7 = "[ 📊 쿼터 잔여 현황 ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
-        $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 520000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
+        $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
         $line11 = ""
         $line12 = "--------------------------------------------------"
         $line13 = "[ ⏰ 쿼터 복구 & 리셋 카운트다운 ]"

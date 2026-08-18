@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (Claude / GPT 등 타 모델 토큰 분리 필터링 엔진)
+# Gemini Token Monitor (실제 첫 토큰 소모 타임스탬프 정밀 감지 엔진 탑재)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (Claude/GPT 필터링 반영) 시작"
+Write-Log "Gemini Token Monitor (실제 첫 토큰 감지 엔진) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -231,7 +231,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 6. Gemini 전용 모델 토큰 스캔 & 타 모델 (Claude / GPT) 완전 제외 필터링 엔진
+    # 6. 실제 토큰 소모 타임스탬프 정밀 감지 스캔 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
@@ -279,29 +279,18 @@ try {
                             $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
                             if ([string]::IsNullOrWhiteSpace($content)) { continue }
 
-                            # 💡 [핵심] Claude / GPT / OpenAI / Anthropic 등 타 AI 모델 로그 검출 및 완전 제외 필터!
+                            # 타 AI 모델(Claude/GPT) 로그 오수집 완전 제외
                             $isNonGeminiModel = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
                                                  $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
                                                  $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
-                            
                             $hasGeminiKeyword = ($content -match '(?i)gemini|google')
 
-                            # 타 모델(Claude/GPT) 로그이고 Gemini 관련 키워드가 없으면 감지에서 완전 제외!
                             if ($isNonGeminiModel -and -not $hasGeminiKeyword) {
                                 continue
                             }
 
                             # 1) 오늘 소모 토큰 스캔
                             if ($fileTime -ge $today) {
-                                if ($fileTime -lt $firstActivityToday) {
-                                    $firstActivityToday = $fileTime
-                                }
-
-                                $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
-                                $reqCount = 1
-                                if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
-                                $requestsToday += $reqCount
-
                                 $maxTokenInFile = 0
                                 $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
                                 foreach ($m in $matches) {
@@ -310,6 +299,20 @@ try {
                                         $maxTokenInFile = $val
                                     }
                                 }
+
+                                # 💡 [핵심] 컴퓨터 부팅 시 파일 touch 시간을 '첫 사용'으로 오인하지 않도록!
+                                # 실제 토큰 소모(maxTokenInFile > 0)나 질문이 발생한 파일 타임스탬프만 첫 토큰 소모 시각으로 인정!
+                                if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
+                                    if ($fileTime -lt $firstActivityToday) {
+                                        $firstActivityToday = $fileTime
+                                    }
+                                }
+
+                                $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
+                                $reqCount = 1
+                                if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
+                                $requestsToday += $reqCount
+
                                 $tokensToday += $maxTokenInFile
 
                                 Record-TokenHistoryLog -Timestamp $fileTime -FilePath $file.FullName -Tokens $maxTokenInFile -Requests $reqCount
@@ -334,6 +337,9 @@ try {
                                 if ($sizeKb -gt 0) {
                                     $tokensToday += ($sizeKb * 12)
                                     $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
+                                    if ($fileTime -lt $firstActivityToday) {
+                                        $firstActivityToday = $fileTime
+                                    }
                                 }
                             }
                             if ($fileTime -ge $start5HoursAgo) {
@@ -367,7 +373,7 @@ try {
                 $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 -> " + $expiry5h.ToString("HH:mm") + " 복구 (" + $span5h.Hours + "시간 " + $span5h.Minutes + "분 남음)"
             }
         } else {
-            $Global:State.TimeUntil5HourResetStr = "오늘 사용 기록 없음 (100% 대기)"
+            $Global:State.TimeUntil5HourResetStr = "오늘 토큰 소모 기록 없음 (100% 대기)"
         }
 
         $Global:State.TimeUntilWeeklyResetStr = Get-WeeklyResetCountdown -ResetDay $Global:Config.weeklyResetDay -ResetHour $Global:Config.weeklyResetHour
@@ -545,7 +551,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (Gemini 전용 모델 100% 필터링) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (실제 토큰 소모 시점 정밀 감지) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -677,7 +683,7 @@ try {
                 $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
             }
 
-            [System.Windows.Forms.MessageBox]::Show("설정이 성공적으로 저장되었습니다.`nGemini 전용 로그만 재집계됩니다.", "성공", "OK", "Information")
+            [System.Windows.Forms.MessageBox]::Show("설정이 성공적으로 저장되었습니다.`n실제 첫 토큰 소모 시점이 재계산됩니다.", "성공", "OK", "Information")
             $f.Close()
             Update-GeminiStatus
         })

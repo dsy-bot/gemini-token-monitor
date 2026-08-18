@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (1~3일 세부 로그 연동 및 초기화 시점 수동 지정/자동 차감 엔진)
+# Gemini Token Monitor (Claude / GPT 등 타 모델 토큰 분리 필터링 엔진)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (로그 연동 & 초기화 시점 수동 보정) 시작"
+Write-Log "Gemini Token Monitor (Claude/GPT 필터링 반영) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -143,7 +143,6 @@ try {
             } catch {}
         }
 
-        # 신규 항목 추가
         $entry = [pscustomobject]@{
             Timestamp = $Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
             File = (Split-Path -Leaf $FilePath)
@@ -232,12 +231,11 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 6. 실측 로그 스캔 & 초기화 시점 이전 토큰 자동 차감 엔진
+    # 6. Gemini 전용 모델 토큰 스캔 & 타 모델 (Claude / GPT) 완전 제외 필터링 엔진
     function Scan-LocalGeminiLogs {
         $now = [DateTime]::Now
         $today = [DateTime]::Today
 
-        # 5시간 롤링 시작점 계산 (설정 파일의 override5HourRemainingMinutes 반영)
         $start5HoursAgo = $now.AddHours(-5)
         $is5HourOverridden = $false
         $target5HourReset = [DateTime]::MinValue
@@ -245,7 +243,6 @@ try {
         if ($null -ne $Global:Config.override5HourRemainingMinutes) {
             $remMins = [int]$Global:Config.override5HourRemainingMinutes
             $target5HourReset = $now.AddMinutes($remMins)
-            # 초기화 시점이 target5HourReset이면, 해당 롤링 5시간 구간의 시작점은 target5HourReset - 5시간!
             $start5HoursAgo = $target5HourReset.AddHours(-5)
             $is5HourOverridden = $true
         }
@@ -278,58 +275,68 @@ try {
                         $fileTime = $file.LastWriteTime
                         if ($fileTime -gt $latestActivity) { $latestActivity = $fileTime }
 
-                        if ($fileTime -ge $today -and $fileTime -lt $firstActivityToday) {
-                            $firstActivityToday = $fileTime
-                        }
+                        if ($file.Extension -ne ".db") {
+                            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                            if ([string]::IsNullOrWhiteSpace($content)) { continue }
 
-                        # 1) 오늘 소모 토큰 스캔 (오늘 자정 이전 토큰은 완전 무시!)
-                        if ($fileTime -ge $today) {
-                            if ($file.Extension -ne ".db") {
-                                $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-                                if ($content) {
-                                    $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
-                                    $reqCount = 1
-                                    if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
-                                    $requestsToday += $reqCount
+                            # 💡 [핵심] Claude / GPT / OpenAI / Anthropic 등 타 AI 모델 로그 검출 및 완전 제외 필터!
+                            $isNonGeminiModel = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
+                                                 $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
+                                                 $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
+                            
+                            $hasGeminiKeyword = ($content -match '(?i)gemini|google')
 
-                                    $maxTokenInFile = 0
-                                    $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
-                                    foreach ($m in $matches) {
-                                        $val = [long]$m.Groups[1].Value
-                                        if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
-                                            $maxTokenInFile = $val
-                                        }
-                                    }
-                                    $tokensToday += $maxTokenInFile
+                            # 타 모델(Claude/GPT) 로그이고 Gemini 관련 키워드가 없으면 감지에서 완전 제외!
+                            if ($isNonGeminiModel -and -not $hasGeminiKeyword) {
+                                continue
+                            }
 
-                                    # 1~3일 세부 토큰 로그 기록
-                                    Record-TokenHistoryLog -Timestamp $fileTime -FilePath $file.FullName -Tokens $maxTokenInFile -Requests $reqCount
+                            # 1) 오늘 소모 토큰 스캔
+                            if ($fileTime -ge $today) {
+                                if ($fileTime -lt $firstActivityToday) {
+                                    $firstActivityToday = $fileTime
                                 }
-                            } elseif ($file.Extension -eq ".db" -or $file.Extension -eq ".jsonl") {
+
+                                $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
+                                $reqCount = 1
+                                if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
+                                $requestsToday += $reqCount
+
+                                $maxTokenInFile = 0
+                                $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                foreach ($m in $matches) {
+                                    $val = [long]$m.Groups[1].Value
+                                    if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
+                                        $maxTokenInFile = $val
+                                    }
+                                }
+                                $tokensToday += $maxTokenInFile
+
+                                Record-TokenHistoryLog -Timestamp $fileTime -FilePath $file.FullName -Tokens $maxTokenInFile -Requests $reqCount
+                            }
+
+                            # 2) 최근 5시간 롤링 스캔
+                            if ($fileTime -ge $start5HoursAgo) {
+                                $max5 = 0
+                                $matches5 = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                foreach ($m in $matches5) {
+                                    $val = [long]$m.Groups[1].Value
+                                    if ($val -gt $max5 -and $val -lt 2000000) {
+                                        $max5 = $val
+                                    }
+                                }
+                                $tokens5h += $max5
+                            }
+
+                        } elseif ($file.Extension -eq ".db") {
+                            if ($fileTime -ge $today) {
                                 $sizeKb = [int]($file.Length / 1024)
                                 if ($sizeKb -gt 0) {
                                     $tokensToday += ($sizeKb * 12)
                                     $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
                                 }
                             }
-                        }
-
-                        # 2) 최근 5시간 롤링 스캔 (초기화 시점 이전 토큰 자동 차감 무시!)
-                        if ($fileTime -ge $start5HoursAgo) {
-                            if ($file.Extension -ne ".db") {
-                                $content5 = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-                                if ($content5) {
-                                    $max5 = 0
-                                    $matches5 = [regex]::Matches($content5, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
-                                    foreach ($m in $matches5) {
-                                        $val = [long]$m.Groups[1].Value
-                                        if ($val -gt $max5 -and $val -lt 2000000) {
-                                            $max5 = $val
-                                        }
-                                    }
-                                    $tokens5h += $max5
-                                }
-                            } else {
+                            if ($fileTime -ge $start5HoursAgo) {
                                 $sizeKb = [int]($file.Length / 1024)
                                 if ($sizeKb -gt 0) {
                                     $tokens5h += ($sizeKb * 10)
@@ -351,7 +358,6 @@ try {
             $Global:State.FirstTokenTimeToday = $firstActivityToday
             $expiry5h = $firstActivityToday.AddHours(5)
             if ($now -ge $expiry5h) {
-                # 5시간 경과 후에는 이전 토큰이 만료되어 롤링 통에서 완전 무시 차감!
                 if ($tokens5h -gt $tokensToday) {
                     $tokens5h = [long]($tokensToday * 0.1)
                 }
@@ -539,7 +545,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (Gemini 전용 모델 100% 필터링) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -671,7 +677,7 @@ try {
                 $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
             }
 
-            [System.Windows.Forms.MessageBox]::Show("초기화 시점 설정이 성공적으로 저장되었습니다.`n로그 데이터를 기반으로 수치가 보정됩니다.", "성공", "OK", "Information")
+            [System.Windows.Forms.MessageBox]::Show("설정이 성공적으로 저장되었습니다.`nGemini 전용 로그만 재집계됩니다.", "성공", "OK", "Information")
             $f.Close()
             Update-GeminiStatus
         })

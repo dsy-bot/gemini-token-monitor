@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (UI 응답 속도 극대화 & 0ms 백그라운드 스캔 초경량 최적화)
+# Gemini Token Monitor (부팅/시작시 0ms 즉시 마우스 반응 & 특정 세션 폴더 타겟팅 최적화)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (0ms 초경량 UI 반응 최적화) 시작"
+Write-Log "Gemini Token Monitor (시작시 0ms 즉시 마우스 반응 최적화) 구동"
 
 try {
     # 1. 설정 불러오기
@@ -112,7 +112,7 @@ try {
         Short5HourRemTimeStr = "100% 대기"
         FirstTokenTimeToday = [DateTime]::MinValue
         LastHIcon = [IntPtr]::Zero
-        IsScanning = $false # 💡 스캔 진행 중 플래그 (UI 락 방지)
+        IsScanning = $false
     }
 
     # 3. 1~3일 세부 토큰 소모 로그 경량 적재 함수
@@ -232,7 +232,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 6. 초고속 비동기 디스크 스캔 엔진 (System.IO 직출로 UI 멈춤 현상 100% 제거)
+    # 6. 초고속 세션 타겟 스캔 엔진 (무의미한 캐시 폴더 탐색 제거 & 타겟 세션 전용)
     function Scan-LocalGeminiLogs {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -261,90 +261,78 @@ try {
             $firstActivityToday = [DateTime]::MaxValue
             $latestActivity = [DateTime]::MinValue
 
+            # 💡 [핵심 최적화] 전체 .gemini 무차별 조회가 아닌 실제 대화 세션 로그 전용 타겟 폴더 지정!
             $searchPaths = @(
-                (Join-Path $env:USERPROFILE ".gemini"),
+                (Join-Path $env:USERPROFILE ".gemini\antigravity\brain"),
                 (Join-Path $env:APPDATA "gemini"),
                 (Join-Path $env:LOCALAPPDATA "gemini")
             )
 
             foreach ($p in $searchPaths) {
                 if ([System.IO.Directory]::Exists($p)) {
-                    # 💡 [초고속 최적화] System.IO.Directory.EnumerateFiles 사용으로 검색 속도 10배 향상!
-                    $files = [System.IO.Directory]::EnumerateFiles($p, "*.*", [System.IO.SearchOption]::AllDirectories)
-                    
-                    foreach ($filePath in $files) {
+                    # *.jsonl, *.json 타겟 파일만 스캔 (무의미한 이미지/캐시 탐색 차단)
+                    $patterns = @("*.jsonl", "*.json")
+                    foreach ($pat in $patterns) {
                         try {
-                            $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
-                            if ($ext -ne ".json" -and $ext -ne ".jsonl" -and $ext -ne ".log" -and $ext -ne ".db") { continue }
+                            $files = [System.IO.Directory]::EnumerateFiles($p, $pat, [System.IO.SearchOption]::AllDirectories)
+                            foreach ($filePath in $files) {
+                                try {
+                                    $lastWrite = [System.IO.File]::GetLastWriteTime($filePath)
+                                    if ($lastWrite -lt $start7DaysAgo) { continue }
 
-                            $lastWrite = [System.IO.File]::GetLastWriteTime($filePath)
-                            if ($lastWrite -lt $start7DaysAgo) { continue }
+                                    if ($lastWrite -gt $latestActivity) { $latestActivity = $lastWrite }
 
-                            if ($lastWrite -gt $latestActivity) { $latestActivity = $lastWrite }
+                                    $fileInfo = New-Object System.IO.FileInfo($filePath)
+                                    if ($fileInfo.Length -gt 5242880) { continue } # 5MB 이상 제외
 
-                            if ($ext -ne ".db") {
-                                # 파일 크기가 5MB 이상인 비정상 파일은 헤더만 처리
-                                $fileInfo = New-Object System.IO.FileInfo($filePath)
-                                if ($fileInfo.Length -gt 5242880) { continue }
+                                    $content = [System.IO.File]::ReadAllText($filePath)
+                                    if ([string]::IsNullOrWhiteSpace($content)) { continue }
 
-                                $content = [System.IO.File]::ReadAllText($filePath)
-                                if ([string]::IsNullOrWhiteSpace($content)) { continue }
+                                    # 타 모델(Claude/GPT) 제외
+                                    $isNonGemini = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
+                                                    $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
+                                                    $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
+                                    $hasGemini = ($content -match '(?i)gemini|google')
 
-                                # 타 모델(Claude/GPT) 제외
-                                $isNonGemini = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
-                                                $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
-                                                $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
-                                $hasGemini = ($content -match '(?i)gemini|google')
+                                    if ($isNonGemini -and -not $hasGemini) { continue }
 
-                                if ($isNonGemini -and -not $hasGemini) { continue }
-
-                                if ($lastWrite -ge $today) {
-                                    $maxTokenInFile = 0
-                                    $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
-                                    foreach ($m in $matches) {
-                                        $val = [long]$m.Groups[1].Value
-                                        if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
-                                            $maxTokenInFile = $val
+                                    if ($lastWrite -ge $today) {
+                                        $maxTokenInFile = 0
+                                        $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                        foreach ($m in $matches) {
+                                            $val = [long]$m.Groups[1].Value
+                                            if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
+                                                $maxTokenInFile = $val
+                                            }
                                         }
+
+                                        if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
+                                            if ($lastWrite -lt $firstActivityToday) {
+                                                $firstActivityToday = $lastWrite
+                                            }
+                                        }
+
+                                        $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
+                                        $reqCount = 1
+                                        if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
+                                        $requestsToday += $reqCount
+
+                                        $tokensToday += $maxTokenInFile
+                                        Record-TokenHistoryLog -Timestamp $lastWrite -FilePath $filePath -Tokens $maxTokenInFile -Requests $reqCount
                                     }
 
-                                    if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
-                                        if ($lastWrite -lt $firstActivityToday) {
-                                            $firstActivityToday = $lastWrite
+                                    if ($lastWrite -ge $start5HoursAgo) {
+                                        $max5 = 0
+                                        $matches5 = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                        foreach ($m in $matches5) {
+                                            $val = [long]$m.Groups[1].Value
+                                            if ($val -gt $max5 -and $val -lt 2000000) {
+                                                $max5 = $val
+                                            }
                                         }
+                                        $tokens5h += $max5
                                     }
-
-                                    $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
-                                    $reqCount = 1
-                                    if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
-                                    $requestsToday += $reqCount
-
-                                    $tokensToday += $maxTokenInFile
-                                    Record-TokenHistoryLog -Timestamp $lastWrite -FilePath $filePath -Tokens $maxTokenInFile -Requests $reqCount
-                                }
-
-                                if ($lastWrite -ge $start5HoursAgo) {
-                                    $max5 = 0
-                                    $matches5 = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
-                                    foreach ($m in $matches5) {
-                                        $val = [long]$m.Groups[1].Value
-                                        if ($val -gt $max5 -and $val -lt 2000000) {
-                                            $max5 = $val
-                                        }
-                                    }
-                                    $tokens5h += $max5
-                                }
-                            } elseif ($ext -eq ".db") {
-                                $fileInfo = New-Object System.IO.FileInfo($filePath)
-                                $sizeKb = [int]($fileInfo.Length / 1024)
-                                if ($lastWrite -ge $today -and $sizeKb -gt 0) {
-                                    $tokensToday += ($sizeKb * 12)
-                                    $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
-                                    if ($lastWrite -lt $firstActivityToday) { $firstActivityToday = $lastWrite }
-                                }
-                                if ($lastWrite -ge $start5HoursAgo -and $sizeKb -gt 0) {
-                                    $tokens5h += ($sizeKb * 10)
-                                }
+                                } catch {}
                             }
                         } catch {}
                     }
@@ -513,9 +501,8 @@ try {
         }
     }
 
-    # 9. 현황 창 (💡 UI 클릭 시 즉시 0ms 렌더링!)
+    # 9. 현황 창 (💡 캐시 데이터 0ms 즉시 렌더링!)
     function Show-StatusDialog {
-        # UI 클릭 시 디스크 재스캔으로 멈추지 않고, 캐시된 $Global:State로 0ms 즉시 표시!
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
         $f.Size = New-Object System.Drawing.Size(560, 540)
@@ -762,7 +749,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 11. NotifyIcon 생성
+    # 11. 💡 NotifyIcon 트레이 및 메시지 루프 즉시 생성 (0ms 마우스 반응보장!)
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = New-BatteryIcon -Percent 100 -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
@@ -793,15 +780,23 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 12. 10분 백그라운드 타이머
+    # 12. 10분 타이머 (스캔은 백그라운드 타이머에서 동구동)
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
     $timer.Add_Tick({ Update-GeminiStatus })
     $timer.Start()
 
-    # 초기화 스캔 1회 구동
-    Update-GeminiStatus
-    Write-Log "NotifyIcon 최적화 초기화 완료"
+    # 💡 시작시 트레이 아이콘이 먼저 생성된 직후 백그라운드 갱신 (마우스 즉시 반응!)
+    $startupTimer = New-Object System.Windows.Forms.Timer
+    $startupTimer.Interval = 100
+    $startupTimer.Add_Tick({
+        $startupTimer.Stop()
+        $startupTimer.Dispose()
+        Update-GeminiStatus
+    })
+    $startupTimer.Start()
+
+    Write-Log "NotifyIcon 0ms 시작 최적화 완료"
 
     # 13. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext

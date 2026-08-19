@@ -47644,5 +47644,3779 @@
         "File":  "00000007.jsonl",
         "Tokens":  0,
         "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:21:14",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:03",
+        "File":  "3e1ddc82-ff51-436b-a04c-bb4512db6c5e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:04",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:59:57",
+        "File":  "config.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:32:32",
+        "File":  "daily_usage.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:33:13",
+        "File":  "monitor.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:32:45",
+        "File":  "token_history.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:37:36",
+        "File":  "77b1449a-ed42-43e6-b36d-5d9799fd46ad.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:35:46",
+        "File":  "session-2026-08-19T00-35-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:36:51",
+        "File":  "session-2026-08-19T00-36-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:38:14",
+        "File":  "session-2026-08-19T00-38-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 14:29:08",
+        "File":  "session-2026-08-19T05-29-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:31:59",
+        "File":  "session-2026-08-19T06-31-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:32:46",
+        "File":  "session-2026-08-19T06-32-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:33:29",
+        "File":  "session-2026-08-19T06-33-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:34:52",
+        "File":  "session-2026-08-19T06-34-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:16:58",
+        "File":  "session-2026-08-19T07-16-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:17:33",
+        "File":  "session-2026-08-19T07-17-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:18:15",
+        "File":  "session-2026-08-19T07-18-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:19:38",
+        "File":  "session-2026-08-19T07-19-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:04",
+        "File":  "oauth_creds.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:32",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:24:51",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:47:49",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:05:51",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:03",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:19:11",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:11",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:44:50",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:50:30",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:06:02",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "e9426c81-0c69-4067-8759-a9434317b4d9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "task-147.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:06:38",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:42",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:34",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 09:21:00",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:37",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:03",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:46",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:08",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:34:59",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:22",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:00",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:38",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:50:26",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:24",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:16",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:38",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:12:54",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:20",
+        "File":  "00000016.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:34",
+        "File":  "00000017.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:55:23",
+        "File":  "00000018.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000019.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:03:50",
+        "File":  "00000020.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:05:56",
+        "File":  "00000021.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:22",
+        "File":  "00000022.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:20",
+        "File":  "00000023.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:30",
+        "File":  "00000024.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:39",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:43",
+        "File":  "00000026.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:02",
+        "File":  "00000027.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:14",
+        "File":  "00000028.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:36:43",
+        "File":  "00000029.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:11",
+        "File":  "00000030.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "00000031.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000032.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000033.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "19788fc5-1e6a-4c15-ae3f-879598c165e9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "1c1c915d-4275-4781-8dc0-2c9536686bdf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "2a76f840-1787-4654-b616-bee8a3fd780d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "2f7bea4c-d2d6-44e9-8dd2-905542dfbcab.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "35cef8e4-21f9-46e0-a616-8522036a8f6e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "37640fbb-b709-471e-97e4-cf6851caee3f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "4ba7fe90-8ff9-4f8c-adf2-1fa7fa8d15f9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:52:25",
+        "File":  "4bffa11a-d20d-4ce6-af65-3efeb4b61660.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:48:08",
+        "File":  "4c7bc3a7-1b19-44ef-9e80-3e196bfd3ddc.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "4e37a39d-0ede-4aba-b804-5978baec69b3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:32",
+        "File":  "580dd6df-f8ac-4af7-a0b2-977a94f0b843.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "602da85d-e624-42da-b259-2e121e034809.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "636e1b9a-1fda-46b5-8a66-11a090e00a33.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "6e283b16-5014-40a3-93e5-0b2f448323c4.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "82c1a1b0-4327-4358-b520-20aabaaf9fa1.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:39",
+        "File":  "895b2797-eea4-47b8-a6f6-cbfe609032a2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "90f4b320-6267-4879-b2b6-9e5e156a5801.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "922854ab-827d-408b-b682-2aaa1f6a65bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "97583f9a-8c4e-4ea7-9686-6a680d2d6bb3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "9995cb9e-4663-4970-9a19-e6e1a32435d2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "9bf77521-ba97-4c78-846c-84bbfbf3fa5a.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:35",
+        "File":  "9cabb346-5bf7-44f8-8e4e-8a27a1ebbe56.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "9eb7c473-1694-4864-92e6-b3746317d2ff.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "9f5fd121-bf39-4e81-b42c-1e52ce1db31f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "a4e42104-7223-4802-bc1f-1df9ed474d70.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "a50fcac4-3411-4fc3-abbb-29d2868835bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:21",
+        "File":  "a8d1dd7c-aee9-4816-a197-084aa59c1322.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:39",
+        "File":  "af9e814e-4bbd-4a6c-b49f-f5d03020132f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "b753db24-316d-4d86-ab90-562a56038bae.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "bb844c02-6521-4222-a566-2b807b8ed220.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:57",
+        "File":  "cd62ab40-7dc2-432a-a2c5-9d22db6b8e34.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "cdaa8c3c-e9b4-4cc7-87d3-c724df590d0d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "cfc6e0fb-6f6c-4d6b-aac0-0a3840a047c9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:41:22",
+        "File":  "da90a691-7e74-4aae-aba4-1cb1631e707b.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "e5d5948c-5886-4f53-b2c4-4104c92a53cf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "e66c0cab-e0dd-4a98-ade8-15665cfcb815.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "ea9ce2f7-9d84-4c1c-9a53-d7e2e4c64a55.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "f5d734ea-cd45-4b4a-8022-066fae856504.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "task-287.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "task-305.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "task-339.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "task-370.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "task-400.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "task-426.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "task-438.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "task-444.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "task-463.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "task-510.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "task-520.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "task-554.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "task-568.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "task-578.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "task-603.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "task-629.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "task-667.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "task-679.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "task-713.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:38",
+        "File":  "task-721.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "task-747.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "task-777.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "task-793.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:55",
+        "File":  "task-801.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "task-814.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:33",
+        "File":  "task-819.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "task-842.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "task-858.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:33",
+        "File":  "task-862.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "task-868.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:51",
+        "File":  "task-871.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "task-878.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:09",
+        "File":  "task-881.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "task-899.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:52",
+        "File":  "task-903.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "task-922.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:36",
+        "File":  "task-926.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:52",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:28",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:12",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:04",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:48",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  122
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  122
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "00000040.jsonl",
+        "Tokens":  0,
+        "Requests":  11
+    },
+    {
+        "Timestamp":  "2026-08-19 16:11:01",
+        "File":  "e3d0a922-5233-47ff-9546-b569e2f5cc98.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:11:01",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:10",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:17:23",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:27:26",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 17:27:26",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:01",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:16:59",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 17:27:26",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 16:35:49",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:35",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:27:26",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:35:43",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  79
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  79
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:25",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:35:37",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:03",
+        "File":  "3e1ddc82-ff51-436b-a04c-bb4512db6c5e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:04",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:59:57",
+        "File":  "config.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:12",
+        "File":  "daily_usage.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:12",
+        "File":  "monitor.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:12",
+        "File":  "token_history.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:37:36",
+        "File":  "77b1449a-ed42-43e6-b36d-5d9799fd46ad.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:35:46",
+        "File":  "session-2026-08-19T00-35-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:36:51",
+        "File":  "session-2026-08-19T00-36-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:38:14",
+        "File":  "session-2026-08-19T00-38-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 14:29:08",
+        "File":  "session-2026-08-19T05-29-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:31:59",
+        "File":  "session-2026-08-19T06-31-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:32:46",
+        "File":  "session-2026-08-19T06-32-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:33:29",
+        "File":  "session-2026-08-19T06-33-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:34:52",
+        "File":  "session-2026-08-19T06-34-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:16:58",
+        "File":  "session-2026-08-19T07-16-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:17:33",
+        "File":  "session-2026-08-19T07-17-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:18:15",
+        "File":  "session-2026-08-19T07-18-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:19:38",
+        "File":  "session-2026-08-19T07-19-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:03",
+        "File":  "session-2026-08-19T08-34-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:04",
+        "File":  "oauth_creds.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:32",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:24:51",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:47:49",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:05:51",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:03",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:19:11",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:11",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:44:50",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:50:30",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:06:02",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "e9426c81-0c69-4067-8759-a9434317b4d9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "task-147.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:06:38",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:42",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:34",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 09:21:00",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:37",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:03",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:46",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:08",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:34:59",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:22",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:00",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:38",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:50:26",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:24",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:16",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:38",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:12:54",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:20",
+        "File":  "00000016.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:34",
+        "File":  "00000017.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:55:23",
+        "File":  "00000018.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000019.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:03:50",
+        "File":  "00000020.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:05:56",
+        "File":  "00000021.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:22",
+        "File":  "00000022.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:20",
+        "File":  "00000023.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:30",
+        "File":  "00000024.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:39",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:43",
+        "File":  "00000026.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:02",
+        "File":  "00000027.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:14",
+        "File":  "00000028.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:36:43",
+        "File":  "00000029.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:11",
+        "File":  "00000030.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "00000031.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000032.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000033.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "19788fc5-1e6a-4c15-ae3f-879598c165e9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "1c1c915d-4275-4781-8dc0-2c9536686bdf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "2a76f840-1787-4654-b616-bee8a3fd780d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "2f7bea4c-d2d6-44e9-8dd2-905542dfbcab.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "35cef8e4-21f9-46e0-a616-8522036a8f6e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "37640fbb-b709-471e-97e4-cf6851caee3f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "4ba7fe90-8ff9-4f8c-adf2-1fa7fa8d15f9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:52:25",
+        "File":  "4bffa11a-d20d-4ce6-af65-3efeb4b61660.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:48:08",
+        "File":  "4c7bc3a7-1b19-44ef-9e80-3e196bfd3ddc.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "4e37a39d-0ede-4aba-b804-5978baec69b3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:32",
+        "File":  "580dd6df-f8ac-4af7-a0b2-977a94f0b843.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "602da85d-e624-42da-b259-2e121e034809.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "636e1b9a-1fda-46b5-8a66-11a090e00a33.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "6e283b16-5014-40a3-93e5-0b2f448323c4.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "82c1a1b0-4327-4358-b520-20aabaaf9fa1.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:39",
+        "File":  "895b2797-eea4-47b8-a6f6-cbfe609032a2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "90f4b320-6267-4879-b2b6-9e5e156a5801.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "922854ab-827d-408b-b682-2aaa1f6a65bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "97583f9a-8c4e-4ea7-9686-6a680d2d6bb3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "9995cb9e-4663-4970-9a19-e6e1a32435d2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "9bf77521-ba97-4c78-846c-84bbfbf3fa5a.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:35",
+        "File":  "9cabb346-5bf7-44f8-8e4e-8a27a1ebbe56.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "9eb7c473-1694-4864-92e6-b3746317d2ff.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "9f5fd121-bf39-4e81-b42c-1e52ce1db31f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "a4e42104-7223-4802-bc1f-1df9ed474d70.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "a50fcac4-3411-4fc3-abbb-29d2868835bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:21",
+        "File":  "a8d1dd7c-aee9-4816-a197-084aa59c1322.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:39",
+        "File":  "af9e814e-4bbd-4a6c-b49f-f5d03020132f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "b753db24-316d-4d86-ab90-562a56038bae.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "bb844c02-6521-4222-a566-2b807b8ed220.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:57",
+        "File":  "cd62ab40-7dc2-432a-a2c5-9d22db6b8e34.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "cdaa8c3c-e9b4-4cc7-87d3-c724df590d0d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "cfc6e0fb-6f6c-4d6b-aac0-0a3840a047c9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:41:22",
+        "File":  "da90a691-7e74-4aae-aba4-1cb1631e707b.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "e5d5948c-5886-4f53-b2c4-4104c92a53cf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "e66c0cab-e0dd-4a98-ade8-15665cfcb815.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "ea9ce2f7-9d84-4c1c-9a53-d7e2e4c64a55.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "f5d734ea-cd45-4b4a-8022-066fae856504.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "task-287.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "task-305.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "task-339.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "task-370.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "task-400.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "task-426.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "task-438.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "task-444.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "task-463.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "task-510.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "task-520.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "task-554.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "task-568.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "task-578.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "task-603.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "task-629.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "task-667.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "task-679.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "task-713.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:38",
+        "File":  "task-721.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "task-747.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "task-777.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "task-793.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:55",
+        "File":  "task-801.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "task-814.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:33",
+        "File":  "task-819.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "task-842.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "task-858.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:33",
+        "File":  "task-862.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "task-868.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:51",
+        "File":  "task-871.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "task-878.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:09",
+        "File":  "task-881.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "task-899.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:52",
+        "File":  "task-903.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "task-922.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:36",
+        "File":  "task-926.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:52",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:28",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:12",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:04",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:48",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  122
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  122
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 16:28:57",
+        "File":  "00000040.jsonl",
+        "Tokens":  0,
+        "Requests":  11
+    },
+    {
+        "Timestamp":  "2026-08-19 16:11:01",
+        "File":  "e3d0a922-5233-47ff-9546-b569e2f5cc98.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:11:01",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:10",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:17:23",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:55",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:55",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  9
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:01",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:16:59",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:55",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 16:35:49",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:13:35",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:51",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:55",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:35:43",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  79
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  79
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:25",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:35:37",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:09",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:03",
+        "File":  "3e1ddc82-ff51-436b-a04c-bb4512db6c5e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:33:04",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:59:57",
+        "File":  "config.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:37:00",
+        "File":  "daily_usage.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:36:12",
+        "File":  "monitor.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:37:00",
+        "File":  "token_history.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:37:36",
+        "File":  "77b1449a-ed42-43e6-b36d-5d9799fd46ad.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:35:46",
+        "File":  "session-2026-08-19T00-35-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:36:51",
+        "File":  "session-2026-08-19T00-36-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:38:14",
+        "File":  "session-2026-08-19T00-38-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 14:29:08",
+        "File":  "session-2026-08-19T05-29-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:31:59",
+        "File":  "session-2026-08-19T06-31-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:32:46",
+        "File":  "session-2026-08-19T06-32-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:33:29",
+        "File":  "session-2026-08-19T06-33-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:34:52",
+        "File":  "session-2026-08-19T06-34-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:16:58",
+        "File":  "session-2026-08-19T07-16-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:17:33",
+        "File":  "session-2026-08-19T07-17-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:18:15",
+        "File":  "session-2026-08-19T07-18-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:19:38",
+        "File":  "session-2026-08-19T07-19-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:03",
+        "File":  "session-2026-08-19T08-34-a2a-serv.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:04",
+        "File":  "oauth_creds.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:32",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:24:51",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:47:49",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:05:51",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:03",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:19:11",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:11",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:44:50",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:50:30",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:06:02",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "e9426c81-0c69-4067-8759-a9434317b4d9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "task-147.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:06:38",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:42",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:34",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 09:21:00",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:37",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:03",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:46",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:08",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:34:59",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:22",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:00",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:38",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:50:26",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:24",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:16",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:38",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:12:54",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:20",
+        "File":  "00000016.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:34",
+        "File":  "00000017.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:55:23",
+        "File":  "00000018.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000019.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:03:50",
+        "File":  "00000020.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:05:56",
+        "File":  "00000021.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:22",
+        "File":  "00000022.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:20",
+        "File":  "00000023.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:30",
+        "File":  "00000024.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:39",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:43",
+        "File":  "00000026.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:02",
+        "File":  "00000027.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:14",
+        "File":  "00000028.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:36:43",
+        "File":  "00000029.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:11",
+        "File":  "00000030.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "00000031.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000032.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000033.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "19788fc5-1e6a-4c15-ae3f-879598c165e9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "1c1c915d-4275-4781-8dc0-2c9536686bdf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "2a76f840-1787-4654-b616-bee8a3fd780d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "2f7bea4c-d2d6-44e9-8dd2-905542dfbcab.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "35cef8e4-21f9-46e0-a616-8522036a8f6e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "37640fbb-b709-471e-97e4-cf6851caee3f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "4ba7fe90-8ff9-4f8c-adf2-1fa7fa8d15f9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:52:25",
+        "File":  "4bffa11a-d20d-4ce6-af65-3efeb4b61660.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:48:08",
+        "File":  "4c7bc3a7-1b19-44ef-9e80-3e196bfd3ddc.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "4e37a39d-0ede-4aba-b804-5978baec69b3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:32",
+        "File":  "580dd6df-f8ac-4af7-a0b2-977a94f0b843.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "602da85d-e624-42da-b259-2e121e034809.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "636e1b9a-1fda-46b5-8a66-11a090e00a33.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "6e283b16-5014-40a3-93e5-0b2f448323c4.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "82c1a1b0-4327-4358-b520-20aabaaf9fa1.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:39",
+        "File":  "895b2797-eea4-47b8-a6f6-cbfe609032a2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "90f4b320-6267-4879-b2b6-9e5e156a5801.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "922854ab-827d-408b-b682-2aaa1f6a65bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "97583f9a-8c4e-4ea7-9686-6a680d2d6bb3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "9995cb9e-4663-4970-9a19-e6e1a32435d2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "9bf77521-ba97-4c78-846c-84bbfbf3fa5a.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:35",
+        "File":  "9cabb346-5bf7-44f8-8e4e-8a27a1ebbe56.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "9eb7c473-1694-4864-92e6-b3746317d2ff.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "9f5fd121-bf39-4e81-b42c-1e52ce1db31f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "a4e42104-7223-4802-bc1f-1df9ed474d70.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "a50fcac4-3411-4fc3-abbb-29d2868835bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:21",
+        "File":  "a8d1dd7c-aee9-4816-a197-084aa59c1322.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:39",
+        "File":  "af9e814e-4bbd-4a6c-b49f-f5d03020132f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "b753db24-316d-4d86-ab90-562a56038bae.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:34:04",
+        "File":  "oauth_creds.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  15
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:32",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:24:51",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:47:49",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:05:51",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:12:03",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:19:11",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:39:11",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:44:50",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 15:50:30",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:06:02",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 16:09:10",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "e9426c81-0c69-4067-8759-a9434317b4d9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 15:25:52",
+        "File":  "task-147.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:06:38",
+        "File":  "implementation_plan.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:42",
+        "File":  "walkthrough.md.metadata.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  55
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:34",
+        "File":  "00000004.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 09:21:00",
+        "File":  "00000005.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000006.jsonl",
+        "Tokens":  0,
+        "Requests":  6
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:37",
+        "File":  "00000007.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:03",
+        "File":  "00000008.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:46",
+        "File":  "00000009.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:08",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:34:59",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:22",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:00",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:38",
+        "File":  "00000010.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:50:26",
+        "File":  "00000011.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:24",
+        "File":  "00000012.jsonl",
+        "Tokens":  0,
+        "Requests":  4
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:16",
+        "File":  "00000013.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:08:38",
+        "File":  "00000014.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:12:54",
+        "File":  "00000015.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:20",
+        "File":  "00000016.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:34",
+        "File":  "00000017.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:55:23",
+        "File":  "00000018.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:28",
+        "File":  "00000019.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:03:50",
+        "File":  "00000020.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:05:56",
+        "File":  "00000021.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:07:22",
+        "File":  "00000022.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:20",
+        "File":  "00000023.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:30",
+        "File":  "00000024.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:39",
+        "File":  "00000025.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:10:43",
+        "File":  "00000026.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:02",
+        "File":  "00000027.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:14",
+        "File":  "00000028.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:36:43",
+        "File":  "00000029.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:11",
+        "File":  "00000030.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "00000031.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:10",
+        "File":  "00000032.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:47",
+        "File":  "00000033.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "19788fc5-1e6a-4c15-ae3f-879598c165e9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "1c1c915d-4275-4781-8dc0-2c9536686bdf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "2a76f840-1787-4654-b616-bee8a3fd780d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "2f7bea4c-d2d6-44e9-8dd2-905542dfbcab.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "35cef8e4-21f9-46e0-a616-8522036a8f6e.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "37640fbb-b709-471e-97e4-cf6851caee3f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "4ba7fe90-8ff9-4f8c-adf2-1fa7fa8d15f9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:52:25",
+        "File":  "4bffa11a-d20d-4ce6-af65-3efeb4b61660.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:48:08",
+        "File":  "4c7bc3a7-1b19-44ef-9e80-3e196bfd3ddc.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "4e37a39d-0ede-4aba-b804-5978baec69b3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:49:32",
+        "File":  "580dd6df-f8ac-4af7-a0b2-977a94f0b843.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "602da85d-e624-42da-b259-2e121e034809.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "636e1b9a-1fda-46b5-8a66-11a090e00a33.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "6e283b16-5014-40a3-93e5-0b2f448323c4.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "82c1a1b0-4327-4358-b520-20aabaaf9fa1.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:39",
+        "File":  "895b2797-eea4-47b8-a6f6-cbfe609032a2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "90f4b320-6267-4879-b2b6-9e5e156a5801.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "922854ab-827d-408b-b682-2aaa1f6a65bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "97583f9a-8c4e-4ea7-9686-6a680d2d6bb3.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "9995cb9e-4663-4970-9a19-e6e1a32435d2.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "9bf77521-ba97-4c78-846c-84bbfbf3fa5a.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:35",
+        "File":  "9cabb346-5bf7-44f8-8e4e-8a27a1ebbe56.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "9eb7c473-1694-4864-92e6-b3746317d2ff.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "9f5fd121-bf39-4e81-b42c-1e52ce1db31f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "a4e42104-7223-4802-bc1f-1df9ed474d70.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "a50fcac4-3411-4fc3-abbb-29d2868835bd.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:21",
+        "File":  "a8d1dd7c-aee9-4816-a197-084aa59c1322.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:39",
+        "File":  "af9e814e-4bbd-4a6c-b49f-f5d03020132f.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "b753db24-316d-4d86-ab90-562a56038bae.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "bb844c02-6521-4222-a566-2b807b8ed220.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:57",
+        "File":  "cd62ab40-7dc2-432a-a2c5-9d22db6b8e34.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "cdaa8c3c-e9b4-4cc7-87d3-c724df590d0d.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "cfc6e0fb-6f6c-4d6b-aac0-0a3840a047c9.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:41:22",
+        "File":  "da90a691-7e74-4aae-aba4-1cb1631e707b.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "e5d5948c-5886-4f53-b2c4-4104c92a53cf.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "e66c0cab-e0dd-4a98-ade8-15665cfcb815.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "ea9ce2f7-9d84-4c1c-9a53-d7e2e4c64a55.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "f5d734ea-cd45-4b4a-8022-066fae856504.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "read.json",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:53:53",
+        "File":  "task-287.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 08:57:41",
+        "File":  "task-305.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:09:06",
+        "File":  "task-339.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:13:14",
+        "File":  "task-370.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:30:42",
+        "File":  "task-400.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 09:56:01",
+        "File":  "task-426.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:35",
+        "File":  "task-438.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:00:45",
+        "File":  "task-444.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:04:16",
+        "File":  "task-463.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 10:11:37",
+        "File":  "task-510.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 11:05:42",
+        "File":  "task-520.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:52:08",
+        "File":  "task-554.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:02:47",
+        "File":  "task-568.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:06:32",
+        "File":  "task-578.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:09:08",
+        "File":  "task-603.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:11:00",
+        "File":  "task-629.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:25:12",
+        "File":  "task-667.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:29:15",
+        "File":  "task-679.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:26",
+        "File":  "task-713.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:32:38",
+        "File":  "task-721.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:35:19",
+        "File":  "task-747.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:37:06",
+        "File":  "task-777.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:36",
+        "File":  "task-793.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:38:55",
+        "File":  "task-801.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:26",
+        "File":  "task-814.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:39:33",
+        "File":  "task-819.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:43:17",
+        "File":  "task-842.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:23",
+        "File":  "task-858.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:33",
+        "File":  "task-862.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:44",
+        "File":  "task-868.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:44:51",
+        "File":  "task-871.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:02",
+        "File":  "task-878.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:45:09",
+        "File":  "task-881.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:45",
+        "File":  "task-899.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:47:52",
+        "File":  "task-903.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:29",
+        "File":  "task-922.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:51:36",
+        "File":  "task-926.log",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  5
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:52",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:28",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  3
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 12:46:12",
+        "File":  "00000000.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:04",
+        "File":  "00000001.jsonl",
+        "Tokens":  0,
+        "Requests":  2
+    },
+    {
+        "Timestamp":  "2026-08-19 12:56:48",
+        "File":  "00000002.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 13:20:37",
+        "File":  "00000003.jsonl",
+        "Tokens":  0,
+        "Requests":  1
+    },
+    {
+        "Timestamp":  "2026-08-19 17:39:04",
+        "File":  "transcript.jsonl",
+        "Tokens":  0,
+        "Requests":  123
+    },
+    {
+        "Timestamp":  "2026-08-19 17:39:04",
+        "File":  "transcript_full.jsonl",
+        "Tokens":  0,
+        "Requests":  123
     }
 ]

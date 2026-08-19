@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (공식 % 입력 기반 자동 쿼터 풀 역산 보정 및 UI 지원)
+# Gemini Token Monitor (트레이 마우스 오버 툴팁 5시간 남은시간 정밀 반영)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (자동 쿼터 역산 보정 엔진) 시작"
+Write-Log "Gemini Token Monitor (트레이 툴팁 5시간 남은시간 반영) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -109,6 +109,7 @@ try {
         TimeUntilResetStr = "계산 중..."
         TimeUntilWeeklyResetStr = "계산 중..."
         TimeUntil5HourResetStr = "계산 중..."
+        Short5HourRemTimeStr = "100% 대기" # 💡 툴팁 전용 짧은 5시간 남은시간 문자열
         FirstTokenTimeToday = [DateTime]::MinValue
         LastHIcon = [IntPtr]::Zero
     }
@@ -352,12 +353,13 @@ try {
             }
         }
 
-        # 5시간 롤링 초기화 남은 시각 및 앵커 산출
+        # 💡 [핵심] 5시간 롤링 초기화 남은 시각 및 툴팁 전용 텍스트 산출
         if ($is5HourOverridden) {
             $spanMins = [int]($target5HourReset - $now).TotalMinutes
             $h = [math]::Floor($spanMins / 60)
             $m = $spanMins % 60
             $Global:State.TimeUntil5HourResetStr = "[수동 지정] " + $target5HourReset.ToString("HH:mm") + " 복구 완료 예정 (" + $h + "시간 " + $m + "분 남음)"
+            $Global:State.Short5HourRemTimeStr = "" + $h + "시간 " + $m + "분 남음"
         } elseif ($firstActivityToday -lt [DateTime]::MaxValue) {
             $Global:State.FirstTokenTimeToday = $firstActivityToday
             $expiry5h = $firstActivityToday.AddHours(5)
@@ -366,12 +368,15 @@ try {
                     $tokens5h = [long]($tokensToday * 0.1)
                 }
                 $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 5시간 경과 -> 100% 복구 완료 후 재소모 중"
+                $Global:State.Short5HourRemTimeStr = "100% 복구완료"
             } else {
                 $span5h = $expiry5h - $now
                 $Global:State.TimeUntil5HourResetStr = $firstActivityToday.ToString("HH:mm") + " 첫 소모 -> " + $expiry5h.ToString("HH:mm") + " 복구 (" + $span5h.Hours + "시간 " + $span5h.Minutes + "분 남음)"
+                $Global:State.Short5HourRemTimeStr = "" + $span5h.Hours + "시간 " + $span5h.Minutes + "분 남음"
             }
         } else {
             $Global:State.TimeUntil5HourResetStr = "오늘 토큰 소모 기록 없음 (100% 대기)"
+            $Global:State.Short5HourRemTimeStr = "100% 대기"
         }
 
         $Global:State.TimeUntilWeeklyResetStr = Get-WeeklyResetCountdown -ResetDay $Global:Config.weeklyResetDay -ResetHour $Global:Config.weeklyResetHour
@@ -483,7 +488,7 @@ try {
         }
     }
 
-    # 8. Gemini 상태 갱신 함수
+    # 8. Gemini 상태 갱신 함수 (트레이 마우스 오버 툴팁 63글자 이내 남은시간 포함 포맷팅)
     function Update-GeminiStatus {
         $Global:State.LastCheckTime = [DateTime]::Now
         $Global:State.NextCheckTime = $Global:State.LastCheckTime.AddMinutes($Global:Config.checkIntervalMinutes)
@@ -513,9 +518,12 @@ try {
         $span = $resetTime - $utcNow
         $Global:State.TimeUntilResetStr = "" + $span.Hours + "시간 " + $span.Minutes + "분 후 자정 리셋"
 
+        # 💡 [핵심] 윈도우 OS 63자 제한에 맞춘 풍부한 마우스 오버 툴팁 생성
+        # 예: "Gemini 5시간 91%(2시간30분 남음) | 주간 85%"
         if ($script:NotifyIcon) {
             $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
-            $tipText = "Gemini Token Monitor (5시간 " + $Global:State.Remaining5HourPercent + "% / 주간 " + $Global:State.RemainingWeeklyPercent + "%)"
+            
+            $tipText = "Gemini 5시간 " + $Global:State.Remaining5HourPercent + "%(" + $Global:State.Short5HourRemTimeStr + ") | 주간 " + $Global:State.RemainingWeeklyPercent + "%"
             if ($tipText.Length -gt 63) { $tipText = $tipText.Substring(0, 63) }
             $script:NotifyIcon.Text = $tipText
         }
@@ -607,7 +615,6 @@ try {
         $cmbDay.DropDownStyle = "DropDownList"
         $cmbDay.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
         $cmbDay.Items.AddRange(@("일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"))
-        # 1=월요일 ~ 0=일요일 매핑
         $dayIdx = $Global:Config.weeklyResetDay
         if ($dayIdx -ge 0 -and $dayIdx -le 6) { $cmbDay.SelectedIndex = $dayIdx } else { $cmbDay.SelectedIndex = 1 }
         $cmbDay.Location = New-Object System.Drawing.Point(20, 40)
@@ -700,11 +707,9 @@ try {
         $btn.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
         $btn.FlatStyle = "Flat"
         $btn.Add_Click({
-            # 요일 및 시각 저장 (0=일 ~ 6=토)
             $Global:Config.weeklyResetDay = $cmbDay.SelectedIndex
             try { $Global:Config.weeklyResetHour = [int]$txtHour.Text.Trim() } catch {}
 
-            # 남은시간 수동 지정
             if ([string]::IsNullOrWhiteSpace($txt5hRem.Text.Trim())) {
                 $Global:Config.override5HourRemainingMinutes = $null
             } else {
@@ -717,7 +722,6 @@ try {
                 try { $Global:Config.overrideWeeklyRemainingHours = [int]$txtWkRem.Text.Trim() } catch {}
             }
 
-            # 💡 [핵심] 실제 공식 잔여 % 입력 시 전체 쿼터 풀 역산 보정!
             Scan-LocalGeminiLogs
             $msgCalibrated = ""
 
@@ -749,7 +753,6 @@ try {
                 } catch {}
             }
 
-            # config.json 저장
             if (Test-Path $ConfigFile) {
                 try {
                     $rawObj = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json

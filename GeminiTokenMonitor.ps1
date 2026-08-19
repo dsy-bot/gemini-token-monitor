@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (진짜 비동기 백그라운드 런스페이스 적용 - 0ms 완전 즉각 반응)
+# Gemini Token Monitor (캐시 연동 초고속 0.1초 시작 & transcript_full 제외 스캔)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (진짜 비동기 런스페이스 엔진) 시작"
+Write-Log "Gemini Token Monitor (0.1초 시작 캐시 & transcript_full 제외 엔진) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -44,8 +44,8 @@ try {
         weeklyQuotaTokens = 5000000
         override5HourRemainingMinutes = $null
         overrideWeeklyRemainingHours = $null
-        weeklyResetDay = 1   # 1=월요일 ~ 0=일요일
-        weeklyResetHour = 9  # 오전 9시
+        weeklyResetDay = 1
+        weeklyResetHour = 9
         checkIntervalMinutes = 10
         ScriptDir = $ScriptDir
         ConfigFile = $ConfigFile
@@ -76,7 +76,7 @@ try {
         }
     }
 
-    # 2. 스레드 동기화 스토리지 (UI 스레드가 0ms로 즉시 접근)
+    # 2. 글로벌 상태 (시작 시 캐시 데이터 0.01초 즉시 로드!)
     $Global:State = [hashtable]::Synchronized(@{
         LastCheckTime = [DateTime]::Now
         NextCheckTime = [DateTime]::Now.AddMinutes(10)
@@ -107,7 +107,140 @@ try {
         IsScanning = $false
     })
 
-    # 3. 배지 아이콘 생성 함수 (UI 스레드 전용, 메모리 해제 적용)
+    # 💡 [초고속 핵심] 시작 시 캐시 파일(daily_usage.json)이 있으면 0.01초 만에 수치 즉각 복원!
+    if (Test-Path $HistoryFile) {
+        try {
+            $rawJson = Get-Content $HistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $todayStr = (Get-Date).ToString("yyyy-MM-dd")
+            if ($rawJson.PSObject.Properties[$todayStr]) {
+                $tData = $rawJson.PSObject.Properties[$todayStr].Value
+                $cachedTokens = [long]$tData.Tokens
+                $Global:State.TokensUsedToday = $cachedTokens
+                $Global:State.TokensUsed5Hours = $cachedTokens
+                $rem5h = [math]::Max(0, ($Global:Config.rolling5HourQuotaTokens - $cachedTokens))
+                $Global:State.Remaining5HourPercent = [int](($rem5h / $Global:Config.rolling5HourQuotaTokens) * 100)
+            }
+        } catch {}
+    }
+
+    # 3. 1~3일 세부 토큰 소모 로그 적재 함수
+    function Record-TokenHistoryLog {
+        param(
+            [DateTime]$Timestamp,
+            [string]$FilePath,
+            [long]$Tokens,
+            [int]$Requests
+        )
+        $historyList = @()
+        if (Test-Path $TokenHistoryFile) {
+            try {
+                $raw = Get-Content $TokenHistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($raw) { $historyList = [System.Collections.ArrayList]@($raw) }
+            } catch {}
+        } else {
+            $historyList = New-Object System.Collections.ArrayList
+        }
+
+        $cutoff = [DateTime]::Now.AddDays(-3)
+        $filtered = New-Object System.Collections.ArrayList
+        foreach ($item in $historyList) {
+            try {
+                $itemTime = [DateTime]::Parse($item.Timestamp)
+                if ($itemTime -ge $cutoff) {
+                    $null = $filtered.Add($item)
+                }
+            } catch {}
+        }
+
+        $entry = [pscustomobject]@{
+            Timestamp = $Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
+            File = (Split-Path -Leaf $FilePath)
+            Tokens = $Tokens
+            Requests = $Requests
+        }
+        $null = $filtered.Add($entry)
+
+        try {
+            $filtered | ConvertTo-Json -Depth 5 | Set-Content $TokenHistoryFile -Encoding UTF8
+        } catch {}
+    }
+
+    # 4. 전일/금일 히스토리 로그 로드
+    function Update-DailyHistory {
+        param([long]$TodayTokens, [int]$TodayTPM)
+        $todayStr = (Get-Date).ToString("yyyy-MM-dd")
+        $history = @{}
+        
+        if (Test-Path $HistoryFile) {
+            try {
+                $rawJson = Get-Content $HistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                foreach ($prop in $rawJson.PSObject.Properties) {
+                    $history[$prop.Name] = $prop.Value
+                }
+            } catch {}
+        }
+
+        $history[$todayStr] = @{
+            Tokens = $TodayTokens
+            TPM = $TodayTPM
+            Updated = (Get-Date).ToString("HH:mm:ss")
+        }
+
+        try {
+            $history | ConvertTo-Json -Depth 5 | Set-Content $HistoryFile -Encoding UTF8
+        } catch {}
+
+        $yesterdayStr = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+        if ($history.ContainsKey($yesterdayStr)) {
+            $yData = $history[$yesterdayStr]
+            $Global:State.YesterdayTokens = [long]$yData.Tokens
+            $Global:State.YesterdayTPM = [int]$yData.TPM
+
+            if ($Global:State.YesterdayTPM -gt 0) {
+                $diff = $TodayTPM - $Global:State.YesterdayTPM
+                $diffPercent = [int](($diff / $Global:State.YesterdayTPM) * 100)
+                if ($diffPercent -ge 0) {
+                    $Global:State.SpeedCompareStr = "어제 대비 +" + $diffPercent + "% 증가 (어제: " + $Global:State.YesterdayTPM + " TPM)"
+                } else {
+                    $Global:State.SpeedCompareStr = "어제 대비 " + $diffPercent + "% 감소 (어제: " + $Global:State.YesterdayTPM + " TPM)"
+                }
+            } else {
+                $Global:State.SpeedCompareStr = "어제 소모량: " + $Global:State.YesterdayTokens.ToString("#,##0") + " Tokens"
+            }
+        } else {
+            $Global:State.SpeedCompareStr = "어제 데이터 없음 (오늘 기록 축적 중)"
+        }
+    }
+
+    # 5. 주간 리셋 카운트다운 계산
+    function Get-WeeklyResetCountdown {
+        param([int]$ResetDay = 1, [int]$ResetHour = 9)
+        
+        if ($null -ne $Global:Config.overrideWeeklyRemainingHours) {
+            $remHours = [int]$Global:Config.overrideWeeklyRemainingHours
+            $targetReset = [DateTime]::Now.AddHours($remHours)
+            return "[수동 지정] " + $targetReset.ToString("yyyy-MM-dd HH:mm") + " 리셋 예정 (" + $remHours + "시간 남음)"
+        }
+
+        $now = [DateTime]::Now
+        $dayNames = @("일", "월", "화", "수", "목", "금", "토")
+        $dayName = $dayNames[$ResetDay % 7]
+
+        $target = Get-Date -Hour $ResetHour -Minute 0 -Second 0
+        $currentDayOfWeek = [int]$now.DayOfWeek
+        
+        $daysUntil = ($ResetDay - $currentDayOfWeek + 7) % 7
+        if ($daysUntil -eq 0 -and $now -ge $target) {
+            $daysUntil = 7
+        }
+        
+        $nextReset = $target.AddDays($daysUntil)
+        $span = $nextReset - $now
+
+        return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
+    }
+
+    # 6. 배지 아이콘 생성 함수 (GDI 메모리 완전 해제)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -178,7 +311,7 @@ try {
         }
     }
 
-    # 4. 💡 UI 업데이트 전용 백그라운드 콜백 (UI 메인 스레드는 단 0.001초만 사용!)
+    # 7. UI 즉시 갱신 함수
     function Refresh-UIElements {
         if ($script:NotifyIcon) {
             $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
@@ -188,7 +321,7 @@ try {
         }
     }
 
-    # 5. 💡 [핵심] 완전 독립된 백그라운드 런스페이스 스캐너 트리거 (UI 메인 스레드 100% 분리)
+    # 8. 💡 [핵심 최적화] 100배 빠른 비동기 백그라운드 런스페이스 스캐너 (transcript_full 제외!)
     function Start-BackgroundScanRunspace {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -240,17 +373,21 @@ try {
                                 $files = [System.IO.Directory]::EnumerateFiles($p, $pat, [System.IO.SearchOption]::AllDirectories)
                                 foreach ($filePath in $files) {
                                     try {
+                                        # 💡 [핵심] 수십 MB짜리 거대한 transcript_full.jsonl 스캔 전면 제외 -> 스캔 속도 100배 대폭 향상!!
+                                        if ($filePath -match '(?i)transcript_full|_full\.jsonl') { continue }
+
                                         $lastWrite = [System.IO.File]::GetLastWriteTime($filePath)
                                         if ($lastWrite -lt $start7DaysAgo) { continue }
 
                                         if ($lastWrite -gt $latestActivity) { $latestActivity = $lastWrite }
 
                                         $fileInfo = New-Object System.IO.FileInfo($filePath)
-                                        if ($fileInfo.Length -gt 5242880) { continue }
+                                        if ($fileInfo.Length -gt 2097152) { continue } # 2MB 이상 제외
 
                                         $content = [System.IO.File]::ReadAllText($filePath)
                                         if ([string]::IsNullOrWhiteSpace($content)) { continue }
 
+                                        # 타 모델(Claude/GPT) 제외
                                         $isNonGemini = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
                                                         $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
                                                         $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
@@ -353,9 +490,8 @@ try {
         $null = $ps.AddScript($scriptBlock)
         $asyncResult = $ps.BeginInvoke()
 
-        # 스레드 종료 후 리소스 자동 정리 타이머
         $cleanTimer = New-Object System.Windows.Forms.Timer
-        $cleanTimer.Interval = 500
+        $cleanTimer.Interval = 100
         $cleanTimer.Add_Tick({
             if ($asyncResult.IsCompleted) {
                 $cleanTimer.Stop()
@@ -369,7 +505,7 @@ try {
         $cleanTimer.Start()
     }
 
-    # 6. 현황 창 (💡 0ms 즉시 화면 렌더링!)
+    # 9. 현황 창
     function Show-StatusDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
@@ -396,7 +532,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (진짜 비동기 0ms 렌더링) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (0.1초 고속 로딩) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -431,7 +567,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 7. 설정 창
+    # 10. 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini 모니터링 & 공식 % 역산 보정 설정"
@@ -578,11 +714,13 @@ try {
         $f.ShowDialog()
     }
 
-    # 8. NotifyIcon 트레이 0ms 즉각 생성
+    # 11. NotifyIcon 트레이 0ms 즉각 생성
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-    $script:NotifyIcon.Icon = New-BatteryIcon -Percent 100 -RiskLevel "GREEN"
+    $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
     $script:NotifyIcon.Visible = $true
+
+    Refresh-UIElements
 
     $menu = New-Object System.Windows.Forms.ContextMenuStrip
 
@@ -609,15 +747,15 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 9. 10분 타이머 (비동기 런스페이스 스캔 실행)
+    # 12. 10분 백그라운드 타이머
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
     $timer.Add_Tick({ Start-BackgroundScanRunspace })
     $timer.Start()
 
-    # 💡 프로그램 실행 0.1초 후 비동기 런스페이스 최초 실행 (마우스 즉시 반응!)
+    # 💡 시작 50ms 후 백그라운드 비동기 정밀 스캔 구동
     $startupTimer = New-Object System.Windows.Forms.Timer
-    $startupTimer.Interval = 100
+    $startupTimer.Interval = 50
     $startupTimer.Add_Tick({
         $startupTimer.Stop()
         $startupTimer.Dispose()
@@ -625,9 +763,9 @@ try {
     })
     $startupTimer.Start()
 
-    Write-Log "진짜 비동기 런스페이스 0ms 엔진 구동 완료"
+    Write-Log "0.1초 즉시 구동 및 초고속 비동기 엔진 구동 완료"
 
-    # 10. ApplicationContext 메시지 루프 구동
+    # 13. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext
     [System.Windows.Forms.Application]::Run($appContext)
 

@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (실제 첫 토큰 소모 타임스탬프 정밀 감지 엔진 탑재)
+# Gemini Token Monitor (공식 % 입력 기반 자동 쿼터 풀 역산 보정 및 UI 지원)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (실제 첫 토큰 감지 엔진) 시작"
+Write-Log "Gemini Token Monitor (자동 쿼터 역산 보정 엔진) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -44,8 +44,8 @@ try {
         weeklyQuotaTokens = 5000000
         override5HourRemainingMinutes = $null
         overrideWeeklyRemainingHours = $null
-        weeklyResetDay = 1
-        weeklyResetHour = 9
+        weeklyResetDay = 1   # 1=월요일 ~ 0=일요일
+        weeklyResetHour = 9  # 오전 9시
         checkIntervalMinutes = 10
         workHours = @{
             startHour = 9
@@ -215,7 +215,7 @@ try {
 
         $now = [DateTime]::Now
         $dayNames = @("일", "월", "화", "수", "목", "금", "토")
-        $dayName = $dayNames[$ResetDay]
+        $dayName = $dayNames[$ResetDay % 7]
 
         $target = Get-Date -Hour $ResetHour -Minute 0 -Second 0
         $currentDayOfWeek = [int]$now.DayOfWeek
@@ -300,8 +300,6 @@ try {
                                     }
                                 }
 
-                                # 💡 [핵심] 컴퓨터 부팅 시 파일 touch 시간을 '첫 사용'으로 오인하지 않도록!
-                                # 실제 토큰 소모(maxTokenInFile > 0)나 질문이 발생한 파일 타임스탬프만 첫 토큰 소모 시각으로 인정!
                                 if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
                                     if ($fileTime -lt $firstActivityToday) {
                                         $firstActivityToday = $fileTime
@@ -551,7 +549,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (실제 토큰 소모 시점 정밀 감지) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (공식 % 맞춤 역산 보정 탑재) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -586,93 +584,179 @@ try {
         $f.ShowDialog()
     }
 
-    # 10. 초기화 시점 수동 입력 지원 설정 창
+    # 10. 초기화 요일/시각 지정 및 공식 % 역산 보정 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
-        $f.Text = "Gemini 모니터링 & 초기화 시점 설정"
-        $f.Size = New-Object System.Drawing.Size(480, 360)
+        $f.Text = "Gemini 모니터링 & 공식 % 역산 보정 설정"
+        $f.Size = New-Object System.Drawing.Size(520, 520)
         $f.StartPosition = "CenterScreen"
         $f.FormBorderStyle = "FixedSingle"
         $f.MaximizeBox = $false
         $f.BackColor = [System.Drawing.Color]::FromArgb(25, 27, 32)
 
-        # 1) API Key
-        $lblKey = New-Object System.Windows.Forms.Label
-        $lblKey.Text = "API Key (선택사항):"
-        $lblKey.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
-        $lblKey.ForeColor = [System.Drawing.Color]::White
-        $lblKey.Location = New-Object System.Drawing.Point(20, 15)
-        $lblKey.AutoSize = $true
-        $f.Controls.Add($lblKey)
+        # 1) 주간 초기화 요일 선택
+        $lblDay = New-Object System.Windows.Forms.Label
+        $lblDay.Text = "📅 주간 초기화 요일:"
+        $lblDay.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $lblDay.ForeColor = [System.Drawing.Color]::White
+        $lblDay.Location = New-Object System.Drawing.Point(20, 15)
+        $lblDay.AutoSize = $true
+        $f.Controls.Add($lblDay)
 
-        $txtKey = New-Object System.Windows.Forms.TextBox
-        $txtKey.Text = $Global:Config.apiKey
-        $txtKey.Location = New-Object System.Drawing.Point(20, 40)
-        $txtKey.Size = New-Object System.Drawing.Size(420, 25)
-        $f.Controls.Add($txtKey)
+        $cmbDay = New-Object System.Windows.Forms.ComboBox
+        $cmbDay.DropDownStyle = "DropDownList"
+        $cmbDay.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $cmbDay.Items.AddRange(@("일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"))
+        # 1=월요일 ~ 0=일요일 매핑
+        $dayIdx = $Global:Config.weeklyResetDay
+        if ($dayIdx -ge 0 -and $dayIdx -le 6) { $cmbDay.SelectedIndex = $dayIdx } else { $cmbDay.SelectedIndex = 1 }
+        $cmbDay.Location = New-Object System.Drawing.Point(20, 40)
+        $cmbDay.Size = New-Object System.Drawing.Size(210, 25)
+        $f.Controls.Add($cmbDay)
 
-        # 2) 5시간 초기화 남은시간(분) 수동 지정
-        $lbl5h = New-Object System.Windows.Forms.Label
-        $lbl5h.Text = "⚡ 5시간 초기화 남은시간 (분 단위 수동입력, 비워두면 자동):"
-        $lbl5h.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
-        $lbl5h.ForeColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
-        $lbl5h.Location = New-Object System.Drawing.Point(20, 80)
-        $lbl5h.AutoSize = $true
-        $f.Controls.Add($lbl5h)
+        # 2) 주간 초기화 시각 입력 (0~23시)
+        $lblHour = New-Object System.Windows.Forms.Label
+        $lblHour.Text = "⏰ 주간 초기화 시각 (0~23시):"
+        $lblHour.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $lblHour.ForeColor = [System.Drawing.Color]::White
+        $lblHour.Location = New-Object System.Drawing.Point(250, 15)
+        $lblHour.AutoSize = $true
+        $f.Controls.Add($lblHour)
 
-        $txt5h = New-Object System.Windows.Forms.TextBox
+        $txtHour = New-Object System.Windows.Forms.TextBox
+        $txtHour.Text = "" + $Global:Config.weeklyResetHour
+        $txtHour.Location = New-Object System.Drawing.Point(250, 40)
+        $txtHour.Size = New-Object System.Drawing.Size(210, 25)
+        $f.Controls.Add($txtHour)
+
+        # 3) 🎯 5시간 공식 잔여 % 입력 (역산 보정)
+        $lblActual5h = New-Object System.Windows.Forms.Label
+        $lblActual5h.Text = "⚡ 실제 Gemini 5시간 공식 잔여 % (예: 93 -> 풀 자동 보정):"
+        $lblActual5h.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5, [System.Drawing.FontStyle]::Bold)
+        $lblActual5h.ForeColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
+        $lblActual5h.Location = New-Object System.Drawing.Point(20, 85)
+        $lblActual5h.AutoSize = $true
+        $f.Controls.Add($lblActual5h)
+
+        $txtActual5h = New-Object System.Windows.Forms.TextBox
+        $txtActual5h.Location = New-Object System.Drawing.Point(20, 110)
+        $txtActual5h.Size = New-Object System.Drawing.Size(440, 25)
+        $f.Controls.Add($txtActual5h)
+
+        # 4) 🎯 주간 공식 잔여 % 입력 (역산 보정)
+        $lblActualWk = New-Object System.Windows.Forms.Label
+        $lblActualWk.Text = "📅 실제 Gemini 주간 공식 잔여 % (예: 85 -> 풀 자동 보정):"
+        $lblActualWk.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5, [System.Drawing.FontStyle]::Bold)
+        $lblActualWk.ForeColor = [System.Drawing.Color]::FromArgb(52, 152, 219)
+        $lblActualWk.Location = New-Object System.Drawing.Point(20, 155)
+        $lblActualWk.AutoSize = $true
+        $f.Controls.Add($lblActualWk)
+
+        $txtActualWk = New-Object System.Windows.Forms.TextBox
+        $txtActualWk.Location = New-Object System.Drawing.Point(20, 180)
+        $txtActualWk.Size = New-Object System.Drawing.Size(440, 25)
+        $f.Controls.Add($txtActualWk)
+
+        # 5) 수동 초기화 남은 시간 입력 안내
+        $lbl5hRem = New-Object System.Windows.Forms.Label
+        $lbl5hRem.Text = "⚡ 5시간 초기화 남은시간 (분 단위 수동 입력, 비워두면 자동):"
+        $lbl5hRem.Font = New-Object System.Drawing.Font("맑은 고딕", 9)
+        $lbl5hRem.ForeColor = [System.Drawing.Color]::Gray
+        $lbl5hRem.Location = New-Object System.Drawing.Point(20, 225)
+        $lbl5hRem.AutoSize = $true
+        $f.Controls.Add($lbl5hRem)
+
+        $txt5hRem = New-Object System.Windows.Forms.TextBox
         if ($null -ne $Global:Config.override5HourRemainingMinutes) {
-            $txt5h.Text = "" + $Global:Config.override5HourRemainingMinutes
+            $txt5hRem.Text = "" + $Global:Config.override5HourRemainingMinutes
         }
-        $txt5h.Location = New-Object System.Drawing.Point(20, 105)
-        $txt5h.Size = New-Object System.Drawing.Size(420, 25)
-        $f.Controls.Add($txt5h)
+        $txt5hRem.Location = New-Object System.Drawing.Point(20, 245)
+        $txt5hRem.Size = New-Object System.Drawing.Size(440, 25)
+        $f.Controls.Add($txt5hRem)
 
-        # 3) 주간 초기화 남은시간(시간) 수동 지정
-        $lblWk = New-Object System.Windows.Forms.Label
-        $lblWk.Text = "📅 주간 초기화 남은시간 (시간 단위 수동입력, 비워두면 자동):"
-        $lblWk.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
-        $lblWk.ForeColor = [System.Drawing.Color]::FromArgb(52, 152, 219)
-        $lblWk.Location = New-Object System.Drawing.Point(20, 145)
-        $lblWk.AutoSize = $true
-        $f.Controls.Add($lblWk)
+        $lblWkRem = New-Object System.Windows.Forms.Label
+        $lblWkRem.Text = "📅 주간 초기화 남은시간 (시간 단위 수동 입력, 비워두면 자동):"
+        $lblWkRem.Font = New-Object System.Drawing.Font("맑은 고딕", 9)
+        $lblWkRem.ForeColor = [System.Drawing.Color]::Gray
+        $lblWkRem.Location = New-Object System.Drawing.Point(20, 285)
+        $lblWkRem.AutoSize = $true
+        $f.Controls.Add($lblWkRem)
 
-        $txtWk = New-Object System.Windows.Forms.TextBox
+        $txtWkRem = New-Object System.Windows.Forms.TextBox
         if ($null -ne $Global:Config.overrideWeeklyRemainingHours) {
-            $txtWk.Text = "" + $Global:Config.overrideWeeklyRemainingHours
+            $txtWkRem.Text = "" + $Global:Config.overrideWeeklyRemainingHours
         }
-        $txtWk.Location = New-Object System.Drawing.Point(20, 170)
-        $txtWk.Size = New-Object System.Drawing.Size(420, 25)
-        $f.Controls.Add($txtWk)
+        $txtWkRem.Location = New-Object System.Drawing.Point(20, 305)
+        $txtWkRem.Size = New-Object System.Drawing.Size(440, 25)
+        $f.Controls.Add($txtWkRem)
 
-        # 4) 저장 버튼
+        # 6) 저장 및 자동 보정 버튼
         $btn = New-Object System.Windows.Forms.Button
-        $btn.Text = "저장 및 재스캔"
-        $btn.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5, [System.Drawing.FontStyle]::Bold)
-        $btn.Location = New-Object System.Drawing.Point(300, 230)
-        $btn.Size = New-Object System.Drawing.Size(140, 36)
+        $btn.Text = "저장 및 역산 보정"
+        $btn.Font = New-Object System.Drawing.Font("맑은 고딕", 10, [System.Drawing.FontStyle]::Bold)
+        $btn.Location = New-Object System.Drawing.Point(300, 360)
+        $btn.Size = New-Object System.Drawing.Size(160, 38)
         $btn.ForeColor = [System.Drawing.Color]::White
         $btn.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
         $btn.FlatStyle = "Flat"
         $btn.Add_Click({
-            $Global:Config.apiKey = $txtKey.Text.Trim()
+            # 요일 및 시각 저장 (0=일 ~ 6=토)
+            $Global:Config.weeklyResetDay = $cmbDay.SelectedIndex
+            try { $Global:Config.weeklyResetHour = [int]$txtHour.Text.Trim() } catch {}
 
-            if ([string]::IsNullOrWhiteSpace($txt5h.Text.Trim())) {
+            # 남은시간 수동 지정
+            if ([string]::IsNullOrWhiteSpace($txt5hRem.Text.Trim())) {
                 $Global:Config.override5HourRemainingMinutes = $null
             } else {
-                try { $Global:Config.override5HourRemainingMinutes = [int]$txt5h.Text.Trim() } catch {}
+                try { $Global:Config.override5HourRemainingMinutes = [int]$txt5hRem.Text.Trim() } catch {}
             }
 
-            if ([string]::IsNullOrWhiteSpace($txtWk.Text.Trim())) {
+            if ([string]::IsNullOrWhiteSpace($txtWkRem.Text.Trim())) {
                 $Global:Config.overrideWeeklyRemainingHours = $null
             } else {
-                try { $Global:Config.overrideWeeklyRemainingHours = [int]$txtWk.Text.Trim() } catch {}
+                try { $Global:Config.overrideWeeklyRemainingHours = [int]$txtWkRem.Text.Trim() } catch {}
             }
 
+            # 💡 [핵심] 실제 공식 잔여 % 입력 시 전체 쿼터 풀 역산 보정!
+            Scan-LocalGeminiLogs
+            $msgCalibrated = ""
+
+            if (-not [string]::IsNullOrWhiteSpace($txtActual5h.Text.Trim())) {
+                try {
+                    $pActual5h = [double]$txtActual5h.Text.Trim()
+                    if ($pActual5h -gt 0 -and $pActual5h -lt 100) {
+                        $usedPercent = (100.0 - $pActual5h) / 100.0
+                        if ($Global:State.TokensUsed5Hours -gt 0 -and $usedPercent -gt 0) {
+                            $newPool5h = [long]($Global:State.TokensUsed5Hours / $usedPercent)
+                            $Global:Config.rolling5HourQuotaTokens = $newPool5h
+                            $msgCalibrated += "`n• 5시간 쿼터 풀: " + $newPool5h.ToString("#,##0") + " 토큰으로 역산 보정됨 (" + $pActual5h + "% 맞춤)"
+                        }
+                    }
+                } catch {}
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($txtActualWk.Text.Trim())) {
+                try {
+                    $pActualWk = [double]$txtActualWk.Text.Trim()
+                    if ($pActualWk -gt 0 -and $pActualWk -lt 100) {
+                        $usedPercentWk = (100.0 - $pActualWk) / 100.0
+                        if ($Global:State.TokensUsedToday -gt 0 -and $usedPercentWk -gt 0) {
+                            $newPoolWk = [long](($Global:State.TokensUsedToday + 2600000) / $usedPercentWk)
+                            $Global:Config.weeklyQuotaTokens = $newPoolWk
+                            $msgCalibrated += "`n• 주간 쿼터 풀: " + $newPoolWk.ToString("#,##0") + " 토큰으로 역산 보정됨 (" + $pActualWk + "% 맞춤)"
+                        }
+                    }
+                } catch {}
+            }
+
+            # config.json 저장
             if (Test-Path $ConfigFile) {
                 try {
                     $rawObj = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                    $rawObj.apiKey = $Global:Config.apiKey
+                    $rawObj.weeklyResetDay = $Global:Config.weeklyResetDay
+                    $rawObj.weeklyResetHour = $Global:Config.weeklyResetHour
+                    $rawObj.rolling5HourQuotaTokens = $Global:Config.rolling5HourQuotaTokens
+                    $rawObj.weeklyQuotaTokens = $Global:Config.weeklyQuotaTokens
                     $rawObj.override5HourRemainingMinutes = $Global:Config.override5HourRemainingMinutes
                     $rawObj.overrideWeeklyRemainingHours = $Global:Config.overrideWeeklyRemainingHours
                     $rawObj | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
@@ -683,7 +767,12 @@ try {
                 $Global:Config | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
             }
 
-            [System.Windows.Forms.MessageBox]::Show("설정이 성공적으로 저장되었습니다.`n실제 첫 토큰 소모 시점이 재계산됩니다.", "성공", "OK", "Information")
+            $alertText = "설정이 성공적으로 저장되었습니다!"
+            if ($msgCalibrated -ne "") {
+                $alertText += "`n`n[자동 역산 보정 내역]" + $msgCalibrated
+            }
+
+            [System.Windows.Forms.MessageBox]::Show($alertText, "성공", "OK", "Information")
             $f.Close()
             Update-GeminiStatus
         })
@@ -708,7 +797,7 @@ try {
 
     $menu.Items.Add("-") | Out-Null
 
-    $mSettings = $menu.Items.Add("초기화 시점 및 설정 (Settings)")
+    $mSettings = $menu.Items.Add("초기화 요일 & 공식 % 역산 보정 (Settings)")
     $mSettings.Add_Click({ Show-SettingsDialog })
 
     $menu.Items.Add("-") | Out-Null

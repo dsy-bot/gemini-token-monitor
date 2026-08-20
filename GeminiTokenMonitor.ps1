@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (antigravity/conversations/*.db 및 .jsonl 전수 정밀 파싱 적용)
+# Gemini Token Monitor (현 상태 보기 81%/93% 실시간 동기화 & daily_usage.json 즉시 캐싱)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (conversations/*.db 포함 실소모 정밀 파싱) 시작"
+Write-Log "Gemini Token Monitor (현 상태 보기 실시간 동기화 패치) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -117,101 +117,14 @@ try {
                 $Global:State.TokensUsedToday = $cachedTokens
                 $Global:State.TokensUsed5Hours = $cachedTokens
                 $rem5h = [math]::Max(0, ($Global:Config.rolling5HourQuotaTokens - $cachedTokens))
-                $Global:State.Remaining5HourPercent = [int](($rem5h / $Global:Config.rolling5HourQuotaTokens) * 100)
+                $p5h = [math]::Floor(($rem5h / $Global:Config.rolling5HourQuotaTokens) * 100)
+                if ($cachedTokens -gt 0 -and $p5h -ge 100) { $p5h = 99 }
+                $Global:State.Remaining5HourPercent = [int]$p5h
             }
         } catch {}
     }
 
-    # 3. 1~3일 세부 토큰 소모 로그 적재 함수
-    function Record-TokenHistoryLog {
-        param(
-            [DateTime]$Timestamp,
-            [string]$FilePath,
-            [long]$Tokens,
-            [int]$Requests
-        )
-        $historyList = @()
-        if (Test-Path $TokenHistoryFile) {
-            try {
-                $raw = Get-Content $TokenHistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($raw) { $historyList = [System.Collections.ArrayList]@($raw) }
-            } catch {}
-        } else {
-            $historyList = New-Object System.Collections.ArrayList
-        }
-
-        $cutoff = [DateTime]::Now.AddDays(-3)
-        $filtered = New-Object System.Collections.ArrayList
-        foreach ($item in $historyList) {
-            try {
-                $itemTime = [DateTime]::Parse($item.Timestamp)
-                if ($itemTime -ge $cutoff) {
-                    $null = $filtered.Add($item)
-                }
-            } catch {}
-        }
-
-        $entry = [pscustomobject]@{
-            Timestamp = $Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
-            File = (Split-Path -Leaf $FilePath)
-            Tokens = $Tokens
-            Requests = $Requests
-        }
-        $null = $filtered.Add($entry)
-
-        try {
-            $filtered | ConvertTo-Json -Depth 5 | Set-Content $TokenHistoryFile -Encoding UTF8
-        } catch {}
-    }
-
-    # 4. 전일/금일 히스토리 로그 로드
-    function Update-DailyHistory {
-        param([long]$TodayTokens, [int]$TodayTPM)
-        $todayStr = (Get-Date).ToString("yyyy-MM-dd")
-        $history = @{}
-        
-        if (Test-Path $HistoryFile) {
-            try {
-                $rawJson = Get-Content $HistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                foreach ($prop in $rawJson.PSObject.Properties) {
-                    $history[$prop.Name] = $prop.Value
-                }
-            } catch {}
-        }
-
-        $history[$todayStr] = @{
-            Tokens = $TodayTokens
-            TPM = $TodayTPM
-            Updated = (Get-Date).ToString("HH:mm:ss")
-        }
-
-        try {
-            $history | ConvertTo-Json -Depth 5 | Set-Content $HistoryFile -Encoding UTF8
-        } catch {}
-
-        $yesterdayStr = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
-        if ($history.ContainsKey($yesterdayStr)) {
-            $yData = $history[$yesterdayStr]
-            $Global:State.YesterdayTokens = [long]$yData.Tokens
-            $Global:State.YesterdayTPM = [int]$yData.TPM
-
-            if ($Global:State.YesterdayTPM -gt 0) {
-                $diff = $TodayTPM - $Global:State.YesterdayTPM
-                $diffPercent = [int](($diff / $Global:State.YesterdayTPM) * 100)
-                if ($diffPercent -ge 0) {
-                    $Global:State.SpeedCompareStr = "어제 대비 +" + $diffPercent + "% 증가 (어제: " + $Global:State.YesterdayTPM + " TPM)"
-                } else {
-                    $Global:State.SpeedCompareStr = "어제 대비 " + $diffPercent + "% 감소 (어제: " + $Global:State.YesterdayTPM + " TPM)"
-                }
-            } else {
-                $Global:State.SpeedCompareStr = "어제 소모량: " + $Global:State.YesterdayTokens.ToString("#,##0") + " Tokens"
-            }
-        } else {
-            $Global:State.SpeedCompareStr = "어제 데이터 없음 (오늘 기록 축적 중)"
-        }
-    }
-
-    # 5. 주간 리셋 카운트다운 계산
+    # 3. 주간 리셋 카운트다운 계산
     function Get-WeeklyResetCountdown {
         param([int]$ResetDay = 1, [int]$ResetHour = 9)
         
@@ -239,7 +152,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 6. 배지 아이콘 생성 함수 (GDI 메모리 해제)
+    # 4. 배지 아이콘 생성 함수 (GDI 메모리 해제)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -310,7 +223,7 @@ try {
         }
     }
 
-    # 7. UI 즉시 갱신 함수
+    # 5. UI 즉시 갱신 함수
     function Refresh-UIElements {
         if ($script:NotifyIcon) {
             $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
@@ -320,7 +233,7 @@ try {
         }
     }
 
-    # 8. 💡 [버그 완전 해결] antigravity/conversations/*.db 및 .jsonl 전수 수집 엔진
+    # 6. 💡 [핵심 최적화] 백그라운드 런스페이스 스캐너 (daily_usage.json 자동 저장 탑재)
     function Start-BackgroundScanRunspace {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -358,7 +271,6 @@ try {
                 $firstActivityToday = [DateTime]::MaxValue
                 $latestActivity = [DateTime]::MinValue
 
-                # 💡 [핵심]conversations DB 폴더 및 brain 폴더 명시적 포함!
                 $searchPaths = @(
                     (Join-Path $env:USERPROFILE ".gemini\antigravity\conversations"),
                     (Join-Path $env:USERPROFILE ".gemini\antigravity\brain"),
@@ -371,7 +283,6 @@ try {
 
                 foreach ($p in $searchPaths) {
                     if ([System.IO.Directory]::Exists($p)) {
-                        # 💡 [핵심] *.db 파일 패턴 전격 추가!
                         $patterns = @("*.jsonl", "*.json", "*.db")
                         foreach ($pat in $patterns) {
                             try {
@@ -388,7 +299,6 @@ try {
                                         $fileInfo = New-Object System.IO.FileInfo($filePath)
                                         $ext = $fileInfo.Extension.ToLower()
 
-                                        # 💡 SQLite DB 파일인 경우 용량 기반 실질 토큰 추출 (KB당 12토큰)
                                         if ($ext -eq ".db") {
                                             $sizeKb = [int]($fileInfo.Length / 1024)
                                             if ($sizeKb -gt 0) {
@@ -495,7 +405,7 @@ try {
                 $SyncState.RemainingTokens = $remDaily
                 $SyncState.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-                # 💡 [핵심] 토큰 소모가 1개라도 발생한 경우 [int] 반올림으로 100% 고정되는 현상 방지!
+                # 💡 잔여 % 계산 (소모 시 100% 올림 차단)
                 $max5h = $SyncConfig.rolling5HourQuotaTokens
                 $rem5h = [math]::Max(0, ($max5h - $tokens5h))
                 $p5h = [math]::Floor(($rem5h / $max5h) * 100)
@@ -507,6 +417,27 @@ try {
                 $pWk = [math]::Floor(($remWk / $maxWk) * 100)
                 if ($tokensToday -gt 0 -and $pWk -ge 100) { $pWk = 99 }
                 $SyncState.RemainingWeeklyPercent = [int]$pWk
+
+                # 💡 백그라운드에서 daily_usage.json 즉각 업데이트
+                try {
+                    $todayKey = (Get-Date).ToString("yyyy-MM-dd")
+                    $histFile = $SyncConfig.HistoryFile
+                    $histObj = @{}
+                    if (Test-Path $histFile) {
+                        try {
+                            $rawH = Get-Content $histFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                            foreach ($pr in $rawH.PSObject.Properties) {
+                                $histObj[$pr.Name] = $pr.Value
+                            }
+                        } catch {}
+                    }
+                    $histObj[$todayKey] = @{
+                        Tokens = $tokensToday
+                        TPM = 0
+                        Updated = (Get-Date).ToString("HH:mm:ss")
+                    }
+                    $histObj | ConvertTo-Json -Depth 5 | Set-Content $histFile -Encoding UTF8
+                } catch {}
 
             } finally {
                 $SyncState.IsScanning = $false
@@ -531,8 +462,13 @@ try {
         $cleanTimer.Start()
     }
 
-    # 9. 현황 창
+    # 7. 현황 창 (💡 열리는 순간 최신 수치 동기화!)
     function Show-StatusDialog {
+        # 현황 창이 열릴 때 토큰 수치가 0이면 백그라운드 스캔 즉시 요청
+        if ($Global:State.TokensUsedToday -eq 0) {
+            Start-BackgroundScanRunspace
+        }
+
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
         $f.Size = New-Object System.Drawing.Size(560, 540)
@@ -558,7 +494,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (conversations DB 수집 반영) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (실시간 동기화) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -567,7 +503,7 @@ try {
         $line13 = "[ ⏰ 쿼터 복구 & 리셋 카운트다운 ]"
         $line14 = "- ⚡ 5시간 롤링 복구 : " + $Global:State.TimeUntil5HourResetStr
         $line15 = "- 📅 주간 쿼터 리셋 : " + $Global:State.TimeUntilWeeklyResetStr
-        $line16 = "- 🌙 일일 쿼터 리셋 : " + $Global:State.TimeUntilResetStr
+        $line16 = "- 🌙 일일 쿼터 리셋 : " + (Get-Date).ToString("yyyy-MM-dd 24:00") + " 자정 리셋"
         $line17 = ""
         $line18 = "--------------------------------------------------"
         $line19 = "[ 🚀 토큰 소모 속도 & 전일 대비 ]"
@@ -593,7 +529,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 10. 설정 창
+    # 8. 설정 창
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini 모니터링 & 공식 % 역산 보정 설정"
@@ -740,7 +676,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 11. NotifyIcon 트레이 생성
+    # 9. NotifyIcon 트레이 생성
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
@@ -773,7 +709,7 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 12. 10분 백그라운드 타이머
+    # 10. 10분 백그라운드 타이머
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
     $timer.Add_Tick({ Start-BackgroundScanRunspace })
@@ -789,9 +725,9 @@ try {
     })
     $startupTimer.Start()
 
-    Write-Log "conversations/*.db 수집 엔진 구동 완료"
+    Write-Log "현 상태 보기 실시간 동기화 엔진 구동 완료"
 
-    # 13. ApplicationContext 메시지 루프 구동
+    # 11. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext
     [System.Windows.Forms.Application]::Run($appContext)
 

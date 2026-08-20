@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (현 상태 보기 81%/93% 실시간 동기화 & daily_usage.json 즉시 캐싱)
+# Gemini Token Monitor (실시간 1분 고속 갱신 & 실시간 대화 수치 동적 반영)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,10 +31,10 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (현 상태 보기 실시간 동기화 패치) 시작"
+Write-Log "Gemini Token Monitor (실시간 1분 고속 갱신 엔진) 시작"
 
 try {
-    # 1. 설정 불러오기
+    # 1. 설정 불러오기 (실시간 대화 감지를 위해 1분 고속 주기 기본 설정)
     $Global:Config = [hashtable]::Synchronized(@{
         apiKey = ""
         enableApiPing = $false
@@ -46,7 +46,7 @@ try {
         overrideWeeklyRemainingHours = $null
         weeklyResetDay = 1
         weeklyResetHour = 9
-        checkIntervalMinutes = 10
+        checkIntervalMinutes = 1 # 💡 1분 실시간 폴링으로 개편!
         ScriptDir = $ScriptDir
         ConfigFile = $ConfigFile
         HistoryFile = $HistoryFile
@@ -70,17 +70,19 @@ try {
             }
             if ($null -ne $json.weeklyResetDay) { $Global:Config.weeklyResetDay = [int]$json.weeklyResetDay }
             if ($null -ne $json.weeklyResetHour) { $Global:Config.weeklyResetHour = [int]$json.weeklyResetHour }
-            if ($json.checkIntervalMinutes) { $Global:Config.checkIntervalMinutes = [int]$json.checkIntervalMinutes }
+            if ($json.checkIntervalMinutes -and $json.checkIntervalMinutes -gt 0) {
+                $Global:Config.checkIntervalMinutes = [int]$json.checkIntervalMinutes
+            }
         } catch {
             Write-Log "config.json 예외: $($_.Exception.Message)"
         }
     }
 
-    # 2. 글로벌 상태 (시작 시 캐시 데이터 복원)
+    # 2. 글로벌 상태
     $Global:State = [hashtable]::Synchronized(@{
         LastCheckTime = [DateTime]::Now
-        NextCheckTime = [DateTime]::Now.AddMinutes(10)
-        ApiStatus = "[오프라인 전용 모드] 네트워크 트래픽 0% (로컬 세션 스캔 전용)"
+        NextCheckTime = [DateTime]::Now.AddMinutes(1)
+        ApiStatus = "[오프라인 전용 모드] 실시간 백그라운드 1분 모니터링"
         LatencyMs = 0
         TokensUsedToday = 0
         RequestCountToday = 0
@@ -95,7 +97,7 @@ try {
         RemainingWeeklyPercent = 100
         BurnRateTPM = 0
         BurnRateTPH = 0
-        SpeedCompareStr = "데이터 수집 중..."
+        SpeedCompareStr = "실시간 수집 중..."
         RiskLevel = "GREEN"
         RiskDescription = "[정상] 안전 (소진 위험 없음)"
         TimeUntilResetStr = "계산 중..."
@@ -223,7 +225,7 @@ try {
         }
     }
 
-    # 5. UI 즉시 갱신 함수
+    # 5. UI 즉시 갱신 함수 (실시간 마우스 오버 툴팁)
     function Refresh-UIElements {
         if ($script:NotifyIcon) {
             $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel $Global:State.RiskLevel
@@ -233,7 +235,7 @@ try {
         }
     }
 
-    # 6. 💡 [핵심 최적화] 백그라운드 런스페이스 스캐너 (daily_usage.json 자동 저장 탑재)
+    # 6. 💡 [실시간 1분 고속 엔진] 백그라운드 런스페이스 스캐너
     function Start-BackgroundScanRunspace {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -398,14 +400,13 @@ try {
                 $SyncState.TokensUsed5Hours = $tokens5h
                 $SyncState.TokensUsedWeekly = $tokens7d
                 $SyncState.LastCheckTime = [DateTime]::Now
-                $SyncState.NextCheckTime = [DateTime]::Now.AddMinutes(10)
+                $SyncState.NextCheckTime = [DateTime]::Now.AddMinutes(1)
 
                 $maxDaily = $SyncConfig.dailyQuotaTokens
                 $remDaily = [math]::Max(0, ($maxDaily - $tokensToday))
                 $SyncState.RemainingTokens = $remDaily
                 $SyncState.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
-                # 💡 잔여 % 계산 (소모 시 100% 올림 차단)
                 $max5h = $SyncConfig.rolling5HourQuotaTokens
                 $rem5h = [math]::Max(0, ($max5h - $tokens5h))
                 $p5h = [math]::Floor(($rem5h / $max5h) * 100)
@@ -418,7 +419,6 @@ try {
                 if ($tokensToday -gt 0 -and $pWk -ge 100) { $pWk = 99 }
                 $SyncState.RemainingWeeklyPercent = [int]$pWk
 
-                # 💡 백그라운드에서 daily_usage.json 즉각 업데이트
                 try {
                     $todayKey = (Get-Date).ToString("yyyy-MM-dd")
                     $histFile = $SyncConfig.HistoryFile
@@ -462,12 +462,9 @@ try {
         $cleanTimer.Start()
     }
 
-    # 7. 현황 창 (💡 열리는 순간 최신 수치 동기화!)
+    # 7. 현황 창 (실시간 0ms 즉시 스캔 요청)
     function Show-StatusDialog {
-        # 현황 창이 열릴 때 토큰 수치가 0이면 백그라운드 스캔 즉시 요청
-        if ($Global:State.TokensUsedToday -eq 0) {
-            Start-BackgroundScanRunspace
-        }
+        Start-BackgroundScanRunspace
 
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 실시간 현황"
@@ -491,10 +488,10 @@ try {
         $line1 = "=================================================="
         $line2 = "        Gemini 토큰 모니터링 현황"
         $line3 = "=================================================="
-        $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
+        $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 1분 고속 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (실시간 동기화) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (1분 동적 실시간 반영) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -709,9 +706,9 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $menu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
-    # 10. 10분 백그라운드 타이머
+    # 10. 💡 1분 실시간 백그라운드 타이머 (10분 -> 1분으로 대폭 개편!)
     $timer = New-Object System.Windows.Forms.Timer
-    $timer.Interval = $Global:Config.checkIntervalMinutes * 60 * 1000
+    $timer.Interval = 60 * 1000 # 60초 (1분 주기)
     $timer.Add_Tick({ Start-BackgroundScanRunspace })
     $timer.Start()
 
@@ -725,7 +722,7 @@ try {
     })
     $startupTimer.Start()
 
-    Write-Log "현 상태 보기 실시간 동기화 엔진 구동 완료"
+    Write-Log "1분 실시간 고속 모니터링 엔진 구동 완료"
 
     # 11. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext

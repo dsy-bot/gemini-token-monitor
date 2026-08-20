@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (캐시 연동 초고속 0.1초 시작 & transcript_full 제외 스캔)
+# Gemini Token Monitor (이스케이프 JSON 문자열 이중 따옴표 토큰 정규식 버그 완전 수정)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (0.1초 시작 캐시 & transcript_full 제외 엔진) 시작"
+Write-Log "Gemini Token Monitor (이스케이프 JSON 토큰 키 정규식 패치) 구동"
 
 try {
     # 1. 설정 불러오기
@@ -76,7 +76,7 @@ try {
         }
     }
 
-    # 2. 글로벌 상태 (시작 시 캐시 데이터 0.01초 즉시 로드!)
+    # 2. 글로벌 상태 (시작 시 캐시 데이터 복원)
     $Global:State = [hashtable]::Synchronized(@{
         LastCheckTime = [DateTime]::Now
         NextCheckTime = [DateTime]::Now.AddMinutes(10)
@@ -107,7 +107,6 @@ try {
         IsScanning = $false
     })
 
-    # 💡 [초고속 핵심] 시작 시 캐시 파일(daily_usage.json)이 있으면 0.01초 만에 수치 즉각 복원!
     if (Test-Path $HistoryFile) {
         try {
             $rawJson = Get-Content $HistoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -240,7 +239,7 @@ try {
         return "매주 " + $dayName + "요일 " + $ResetHour + ":00 기준 (" + $span.Days + "일 " + $span.Hours + "시간 남음)"
     }
 
-    # 6. 배지 아이콘 생성 함수 (GDI 메모리 완전 해제)
+    # 6. 배지 아이콘 생성 함수 (GDI 메모리 해제)
     function New-BatteryIcon {
         param (
             [int]$Percent = 100,
@@ -321,7 +320,7 @@ try {
         }
     }
 
-    # 8. 💡 [핵심 최적화] 100배 빠른 비동기 백그라운드 런스페이스 스캐너 (transcript_full 제외!)
+    # 8. 💡 [핵심 버그 수정] 이스케이프 JSON 키 및 실시간 대화 트랜스크립트 100% 감지 백그라운드 스캐너
     function Start-BackgroundScanRunspace {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -361,9 +360,13 @@ try {
 
                 $searchPaths = @(
                     (Join-Path $env:USERPROFILE ".gemini\antigravity\brain"),
+                    (Join-Path $env:USERPROFILE ".gemini"),
                     (Join-Path $env:APPDATA "gemini"),
                     (Join-Path $env:LOCALAPPDATA "gemini")
                 )
+
+                # 💡 [핵심 정규식] 이스케이프 문자(\"totalTokens\") 및 백슬래시 함유 JSON 키 100% 지원!
+                $tokenRegex = '(?i)(?:totalTokens|totalTokenCount|total_tokens|token_count)\\*["'']?\s*:\s*(\d+)'
 
                 foreach ($p in $searchPaths) {
                     if ([System.IO.Directory]::Exists($p)) {
@@ -373,7 +376,7 @@ try {
                                 $files = [System.IO.Directory]::EnumerateFiles($p, $pat, [System.IO.SearchOption]::AllDirectories)
                                 foreach ($filePath in $files) {
                                     try {
-                                        # 💡 [핵심] 수십 MB짜리 거대한 transcript_full.jsonl 스캔 전면 제외 -> 스캔 속도 100배 대폭 향상!!
+                                        # 수십 MB짜리 transcript_full만 제외, transcript.jsonl은 정밀 스캔!
                                         if ($filePath -match '(?i)transcript_full|_full\.jsonl') { continue }
 
                                         $lastWrite = [System.IO.File]::GetLastWriteTime($filePath)
@@ -382,7 +385,7 @@ try {
                                         if ($lastWrite -gt $latestActivity) { $latestActivity = $lastWrite }
 
                                         $fileInfo = New-Object System.IO.FileInfo($filePath)
-                                        if ($fileInfo.Length -gt 2097152) { continue } # 2MB 이상 제외
+                                        if ($fileInfo.Length -gt 5242880) { continue } # 5MB 이상 제외
 
                                         $content = [System.IO.File]::ReadAllText($filePath)
                                         if ([string]::IsNullOrWhiteSpace($content)) { continue }
@@ -397,10 +400,11 @@ try {
 
                                         if ($lastWrite -ge $today) {
                                             $maxTokenInFile = 0
-                                            $matches = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                            $matches = [regex]::Matches($content, $tokenRegex)
                                             foreach ($m in $matches) {
                                                 $val = [long]$m.Groups[1].Value
-                                                if ($val -gt $maxTokenInFile -and $val -lt 2000000) {
+                                                # 쿼터 풀 설정 상수는 제외하고 대화 세션 토큰만 취합
+                                                if ($val -gt $maxTokenInFile -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
                                                     $maxTokenInFile = $val
                                                 }
                                             }
@@ -421,10 +425,10 @@ try {
 
                                         if ($lastWrite -ge $start5HoursAgo) {
                                             $max5 = 0
-                                            $matches5 = [regex]::Matches($content, '"(?:totalTokens|totalTokenCount|total_tokens|token_count)"\s*:\s*(\d+)')
+                                            $matches5 = [regex]::Matches($content, $tokenRegex)
                                             foreach ($m in $matches5) {
                                                 $val = [long]$m.Groups[1].Value
-                                                if ($val -gt $max5 -and $val -lt 2000000) {
+                                                if ($val -gt $max5 -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
                                                     $max5 = $val
                                                 }
                                             }
@@ -532,7 +536,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (0.1초 고속 로딩) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (실시간 정밀 감지) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -714,7 +718,7 @@ try {
         $f.ShowDialog()
     }
 
-    # 11. NotifyIcon 트레이 0ms 즉각 생성
+    # 11. NotifyIcon 트레이 생성
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = New-BatteryIcon -Percent $Global:State.Remaining5HourPercent -RiskLevel "GREEN"
     $script:NotifyIcon.Text = "Gemini Token Monitor"
@@ -753,7 +757,7 @@ try {
     $timer.Add_Tick({ Start-BackgroundScanRunspace })
     $timer.Start()
 
-    # 💡 시작 50ms 후 백그라운드 비동기 정밀 스캔 구동
+    # 💡 시작 50ms 후 스캔 즉시 1회 구동
     $startupTimer = New-Object System.Windows.Forms.Timer
     $startupTimer.Interval = 50
     $startupTimer.Add_Tick({
@@ -763,7 +767,7 @@ try {
     })
     $startupTimer.Start()
 
-    Write-Log "0.1초 즉시 구동 및 초고속 비동기 엔진 구동 완료"
+    Write-Log "이스케이프 JSON 토큰 키 패치 구동 완료"
 
     # 13. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext

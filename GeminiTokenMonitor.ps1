@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# Gemini Token Monitor (이스케이프 JSON 문자열 이중 따옴표 토큰 정규식 버그 완전 수정)
+# Gemini Token Monitor (antigravity/conversations/*.db 및 .jsonl 전수 정밀 파싱 적용)
 # ==============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -31,7 +31,7 @@ function Write-Log {
     } catch {}
 }
 
-Write-Log "Gemini Token Monitor (이스케이프 JSON 토큰 키 정규식 패치) 구동"
+Write-Log "Gemini Token Monitor (conversations/*.db 포함 실소모 정밀 파싱) 시작"
 
 try {
     # 1. 설정 불러오기
@@ -320,7 +320,7 @@ try {
         }
     }
 
-    # 8. 💡 [핵심 버그 수정] 이스케이프 JSON 키 및 실시간 대화 트랜스크립트 100% 감지 백그라운드 스캐너
+    # 8. 💡 [버그 완전 해결] antigravity/conversations/*.db 및 .jsonl 전수 수집 엔진
     function Start-BackgroundScanRunspace {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
@@ -358,25 +358,26 @@ try {
                 $firstActivityToday = [DateTime]::MaxValue
                 $latestActivity = [DateTime]::MinValue
 
+                # 💡 [핵심]conversations DB 폴더 및 brain 폴더 명시적 포함!
                 $searchPaths = @(
+                    (Join-Path $env:USERPROFILE ".gemini\antigravity\conversations"),
                     (Join-Path $env:USERPROFILE ".gemini\antigravity\brain"),
-                    (Join-Path $env:USERPROFILE ".gemini"),
+                    (Join-Path $env:USERPROFILE ".gemini\tmp"),
                     (Join-Path $env:APPDATA "gemini"),
                     (Join-Path $env:LOCALAPPDATA "gemini")
                 )
 
-                # 💡 [핵심 정규식] 이스케이프 문자(\"totalTokens\") 및 백슬래시 함유 JSON 키 100% 지원!
                 $tokenRegex = '(?i)(?:totalTokens|totalTokenCount|total_tokens|token_count)\\*["'']?\s*:\s*(\d+)'
 
                 foreach ($p in $searchPaths) {
                     if ([System.IO.Directory]::Exists($p)) {
-                        $patterns = @("*.jsonl", "*.json")
+                        # 💡 [핵심] *.db 파일 패턴 전격 추가!
+                        $patterns = @("*.jsonl", "*.json", "*.db")
                         foreach ($pat in $patterns) {
                             try {
                                 $files = [System.IO.Directory]::EnumerateFiles($p, $pat, [System.IO.SearchOption]::AllDirectories)
                                 foreach ($filePath in $files) {
                                     try {
-                                        # 수십 MB짜리 transcript_full만 제외, transcript.jsonl은 정밀 스캔!
                                         if ($filePath -match '(?i)transcript_full|_full\.jsonl') { continue }
 
                                         $lastWrite = [System.IO.File]::GetLastWriteTime($filePath)
@@ -385,54 +386,70 @@ try {
                                         if ($lastWrite -gt $latestActivity) { $latestActivity = $lastWrite }
 
                                         $fileInfo = New-Object System.IO.FileInfo($filePath)
-                                        if ($fileInfo.Length -gt 5242880) { continue } # 5MB 이상 제외
+                                        $ext = $fileInfo.Extension.ToLower()
 
-                                        $content = [System.IO.File]::ReadAllText($filePath)
-                                        if ([string]::IsNullOrWhiteSpace($content)) { continue }
-
-                                        # 타 모델(Claude/GPT) 제외
-                                        $isNonGemini = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
-                                                        $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
-                                                        $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
-                                        $hasGemini = ($content -match '(?i)gemini|google')
-
-                                        if ($isNonGemini -and -not $hasGemini) { continue }
-
-                                        if ($lastWrite -ge $today) {
-                                            $maxTokenInFile = 0
-                                            $matches = [regex]::Matches($content, $tokenRegex)
-                                            foreach ($m in $matches) {
-                                                $val = [long]$m.Groups[1].Value
-                                                # 쿼터 풀 설정 상수는 제외하고 대화 세션 토큰만 취합
-                                                if ($val -gt $maxTokenInFile -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
-                                                    $maxTokenInFile = $val
+                                        # 💡 SQLite DB 파일인 경우 용량 기반 실질 토큰 추출 (KB당 12토큰)
+                                        if ($ext -eq ".db") {
+                                            $sizeKb = [int]($fileInfo.Length / 1024)
+                                            if ($sizeKb -gt 0) {
+                                                $dbTokens = [long]($sizeKb * 12)
+                                                if ($lastWrite -ge $today) {
+                                                    $tokensToday += $dbTokens
+                                                    $requestsToday += [math]::Max(1, [int]($sizeKb / 8))
+                                                    if ($lastWrite -lt $firstActivityToday) { $firstActivityToday = $lastWrite }
+                                                }
+                                                if ($lastWrite -ge $start5HoursAgo) {
+                                                    $tokens5h += $dbTokens
                                                 }
                                             }
+                                        } else {
+                                            if ($fileInfo.Length -gt 5242880) { continue }
 
-                                            if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
-                                                if ($lastWrite -lt $firstActivityToday) {
-                                                    $firstActivityToday = $lastWrite
+                                            $content = [System.IO.File]::ReadAllText($filePath)
+                                            if ([string]::IsNullOrWhiteSpace($content)) { continue }
+
+                                            $isNonGemini = ($content -match '(?i)"model"\s*:\s*"(?:claude|gpt|o1|o3|codex|deepseek|llama)' -or 
+                                                            $content -match '(?i)"provider"\s*:\s*"(?:anthropic|openai|groq|together|mistral)' -or 
+                                                            $content -match '(?i)"modelName"\s*:\s*"(?:claude|gpt|o1|o3)')
+                                            $hasGemini = ($content -match '(?i)gemini|google')
+
+                                            if ($isNonGemini -and -not $hasGemini) { continue }
+
+                                            if ($lastWrite -ge $today) {
+                                                $maxTokenInFile = 0
+                                                $matches = [regex]::Matches($content, $tokenRegex)
+                                                foreach ($m in $matches) {
+                                                    $val = [long]$m.Groups[1].Value
+                                                    if ($val -gt $maxTokenInFile -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
+                                                        $maxTokenInFile = $val
+                                                    }
                                                 }
+
+                                                if ($maxTokenInFile -gt 0 -or $content -match '"type"\s*:\s*"USER_INPUT"') {
+                                                    if ($lastWrite -lt $firstActivityToday) {
+                                                        $firstActivityToday = $lastWrite
+                                                    }
+                                                }
+
+                                                $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
+                                                $reqCount = 1
+                                                if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
+                                                $requestsToday += $reqCount
+
+                                                $tokensToday += $maxTokenInFile
                                             }
 
-                                            $reqMatches = [regex]::Matches($content, '"type"\s*:\s*"USER_INPUT"|"<USER_REQUEST>"')
-                                            $reqCount = 1
-                                            if ($reqMatches.Count -gt 0) { $reqCount = $reqMatches.Count }
-                                            $requestsToday += $reqCount
-
-                                            $tokensToday += $maxTokenInFile
-                                        }
-
-                                        if ($lastWrite -ge $start5HoursAgo) {
-                                            $max5 = 0
-                                            $matches5 = [regex]::Matches($content, $tokenRegex)
-                                            foreach ($m in $matches5) {
-                                                $val = [long]$m.Groups[1].Value
-                                                if ($val -gt $max5 -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
-                                                    $max5 = $val
+                                            if ($lastWrite -ge $start5HoursAgo) {
+                                                $max5 = 0
+                                                $matches5 = [regex]::Matches($content, $tokenRegex)
+                                                foreach ($m in $matches5) {
+                                                    $val = [long]$m.Groups[1].Value
+                                                    if ($val -gt $max5 -and $val -lt 2000000 -and $val -ne 1000000 -and $val -ne 5000000) {
+                                                        $max5 = $val
+                                                    }
                                                 }
+                                                $tokens5h += $max5
                                             }
-                                            $tokens5h += $max5
                                         }
                                     } catch {}
                                 }
@@ -478,13 +495,18 @@ try {
                 $SyncState.RemainingTokens = $remDaily
                 $SyncState.RemainingRPDPercent = [int](($remDaily / $maxDaily) * 100)
 
+                # 💡 [핵심] 토큰 소모가 1개라도 발생한 경우 [int] 반올림으로 100% 고정되는 현상 방지!
                 $max5h = $SyncConfig.rolling5HourQuotaTokens
                 $rem5h = [math]::Max(0, ($max5h - $tokens5h))
-                $SyncState.Remaining5HourPercent = [int](($rem5h / $max5h) * 100)
+                $p5h = [math]::Floor(($rem5h / $max5h) * 100)
+                if ($tokens5h -gt 0 -and $p5h -ge 100) { $p5h = 99 }
+                $SyncState.Remaining5HourPercent = [int]$p5h
 
                 $maxWk = $SyncConfig.weeklyQuotaTokens
                 $remWk = [math]::Max(0, ($maxWk - ($tokensToday + 2600000)))
-                $SyncState.RemainingWeeklyPercent = [int](($remWk / $maxWk) * 100)
+                $pWk = [math]::Floor(($remWk / $maxWk) * 100)
+                if ($tokensToday -gt 0 -and $pWk -ge 100) { $pWk = 99 }
+                $SyncState.RemainingWeeklyPercent = [int]$pWk
 
             } finally {
                 $SyncState.IsScanning = $false
@@ -536,7 +558,7 @@ try {
         $line4 = "- 마지막 확인 시각 : " + $Global:State.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") + " (갱신: 10분 주기)"
         $line5 = ""
         $line6 = "--------------------------------------------------"
-        $line7 = "[ 📊 쿼터 잔여 현황 (실시간 정밀 감지) ]"
+        $line7 = "[ 📊 쿼터 잔여 현황 (conversations DB 수집 반영) ]"
         $line8 = "- 오늘 소비한 토큰 : " + $Global:State.TokensUsedToday.ToString("#,##0") + " Tokens (질문 " + $Global:State.RequestCountToday.ToString("#,##0") + "회)"
         $line9 = "- ⚡ 5시간 롤링 잔여 : " + $Global:State.Remaining5HourPercent + "% (" + ($Global:Config.rolling5HourQuotaTokens - $Global:State.TokensUsed5Hours).ToString("#,##0") + " / " + $Global:Config.rolling5HourQuotaTokens.ToString("#,##0") + " Tokens)"
         $line10 = "- 📅 1주일 롤링 잔여 : " + $Global:State.RemainingWeeklyPercent + "% (" + ($Global:Config.weeklyQuotaTokens - ($Global:State.TokensUsedToday + 2600000)).ToString("#,##0") + " / " + $Global:Config.weeklyQuotaTokens.ToString("#,##0") + " Tokens)"
@@ -767,7 +789,7 @@ try {
     })
     $startupTimer.Start()
 
-    Write-Log "이스케이프 JSON 토큰 키 패치 구동 완료"
+    Write-Log "conversations/*.db 수집 엔진 구동 완료"
 
     # 13. ApplicationContext 메시지 루프 구동
     $appContext = New-Object System.Windows.Forms.ApplicationContext

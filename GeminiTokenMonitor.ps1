@@ -279,47 +279,50 @@ try {
                             $dbLW   = $dbInfo.LastWriteTime
                             if ($dbLW -lt $start7d) { continue }
 
-                            $dbKey      = $dbPath
+                            $dbKey     = $dbPath
                             $prevSizeKB = 0L
                             if ($SyncState.FileOffsetCache.ContainsKey($dbKey)) {
                                 $prevSizeKB = $SyncState.FileOffsetCache[$dbKey]
                             }
                             $curSizeKB = [long]($dbInfo.Length / 1024)
 
-                            # 증분 크기 (오늘 처음 보는 파일이면 전체 사용)
-                            $addedKB = if ($prevSizeKB -eq 0L) {
-                                # 첫 스캔: 오늘 수정된 파일만 전체 크기 반영
-                                if ($dbLW -ge $today) { $curSizeKB } else { 0L }
-                            } elseif ($curSizeKB -gt $prevSizeKB) {
-                                # 증분: 새로 추가된 KB만
-                                $curSizeKB - $prevSizeKB
-                            } else { 0L }
-
-                            # 캐시 업데이트
-                            $SyncState.FileOffsetCache[$dbKey] = $curSizeKB
-
-                            if ($addedKB -le 0) { continue }
-
-                            $addedTokens = $addedKB * $tokPerKB
-
-                            # 이미 캐시에 있는 누적 토큰 + 증분
-                            $prevTokens = 0L
+                            # 이전 누적 토큰 캐시 읽기
+                            $cachedTotal = 0L
                             if ($SyncState.FileTokenCache.ContainsKey($dbKey)) {
-                                $prevTokens = $SyncState.FileTokenCache[$dbKey]
+                                $cachedTotal = $SyncState.FileTokenCache[$dbKey]
                             }
-                            $newTokens = $prevTokens + $addedTokens
-                            $SyncState.FileTokenCache[$dbKey] = $newTokens
 
-                            # 오늘 활동 집계
+                            # 새 토큰 합계 계산 (증분 방식)
+                            $newTotal = if ($prevSizeKB -eq 0L) {
+                                # 첫 스캔: 오늘 수정된 파일만 전체 크기 반영
+                                if ($dbLW -ge $today) { $curSizeKB * $tokPerKB } else { 0L }
+                            } elseif ($curSizeKB -gt $prevSizeKB) {
+                                # 파일이 커진 경우: 이전 누적 + 증분
+                                $cachedTotal + (($curSizeKB - $prevSizeKB) * $tokPerKB)
+                            } else {
+                                # 파일 크기 변화 없음: 캐시된 누적값 그대로 유지
+                                $cachedTotal
+                            }
+
+                            # 캐시 업데이트 (항상)
+                            $SyncState.FileOffsetCache[$dbKey] = $curSizeKB
+                            $SyncState.FileTokenCache[$dbKey]  = $newTotal
+
+                            # 토큰이 0이면 집계 생략
+                            if ($newTotal -le 0) { continue }
+
+                            # ✅ 오늘 활동 집계 (파일 변화 여부와 무관하게 누적 합산)
                             if ($dbLW -ge $today) {
-                                $tokensToday += $newTokens
-                                $requestsToday += [math]::Max(1, [int]($addedKB / 8))
+                                $tokensToday += $newTotal
+                                if ($curSizeKB -gt $prevSizeKB) {
+                                    $requestsToday += [math]::Max(1, [int](($curSizeKB - $prevSizeKB) / 8))
+                                }
                                 if ($dbLW -lt $firstActivity) { $firstActivity = $dbLW }
                             }
 
-                            # 5시간 롤링 집계 (최근 5시간 내 수정된 파일만)
+                            # ✅ 5시간 롤링 집계 (최근 5시간 내 수정된 파일)
                             if ($dbLW -ge $start5h) {
-                                $tokens5h += $newTokens
+                                $tokens5h += $newTotal
                             }
                         } catch {}
                     }

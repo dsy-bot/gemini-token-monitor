@@ -136,6 +136,7 @@ try {
         TimeUntil5HourResetStr  = "계산 중..."
         Short5HourRemTimeStr    = "계산 중..."
         WeeklyFirstUseTime      = [DateTime]::MinValue
+        WeeklyExpiryTime        = [DateTime]::MinValue   # 수동 설정된 주간 종료 시각
         FirstTokenTimeToday     = [DateTime]::MinValue
         LastHIcon               = [IntPtr]::Zero
         IsScanning              = $false
@@ -163,6 +164,16 @@ try {
             $wft = [DateTime]::Parse($sc.weeklyFirstUseTime)
             if (([DateTime]::Now - $wft).TotalDays -le 7) {
                 $Global:State.WeeklyFirstUseTime = $wft
+            }
+        } catch {}
+    }
+
+    # 주간 종료 시각 복원 (수동 설정. 미래 시각인 경우만)
+    if ($sc.weeklyExpiryTime -ne $null -and "$($sc.weeklyExpiryTime)" -ne "") {
+        try {
+            $wet = [DateTime]::Parse($sc.weeklyExpiryTime)
+            if ($wet -gt [DateTime]::Now) {
+                $Global:State.WeeklyExpiryTime = $wet
             }
         } catch {}
     }
@@ -447,14 +458,39 @@ try {
                     $SyncState.Short5HourRemTimeStr   = "대기 중"
                 }
 
-                # 주간 카운트다운 (롤링 7일)
-                if ($wft -gt [DateTime]::MinValue) {
+                # 주간 카운트다운 — 수동 종료 시각 우선, 없으면 롤링 7일
+                $wet = $SyncState.WeeklyExpiryTime
+                if ($wet -gt [DateTime]::MinValue) {
+                    # 수동 설정된 종료 시각 기준
+                    if ($now -ge $wet) {
+                        # 종료 시각 경과 → 주간 리셋
+                        $SyncState.WeeklyExpiryTime  = [DateTime]::MinValue
+                        $SyncState.WeeklyFirstUseTime = [DateTime]::MinValue
+                        $SyncState.HasCalibWk = $false; $SyncState.CalibWkUsed = 0L
+                        $SyncState.TimeUntilWeeklyResetStr = "주간 초기화 완료 - 다음 사용 시 새 7일 윈도우 시작"
+                        try {
+                            $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
+                                [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
+                            } else { [pscustomobject]@{} }
+                            $sc2 | Add-Member -Force NotePropertyName weeklyExpiryTime    -NotePropertyValue $null
+                            $sc2 | Add-Member -Force NotePropertyName weeklyFirstUseTime  -NotePropertyValue $null
+                            $sc2 | Add-Member -Force NotePropertyName calibWk             -NotePropertyValue $null
+                            [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
+                        } catch {}
+                    } else {
+                        $wspan = $wet - $now
+                        $dStr  = if ($wspan.Days -gt 0) { $wspan.Days.ToString() + "일 " } else { "" }
+                        $SyncState.TimeUntilWeeklyResetStr = "[수동] " + $wet.ToString("MM/dd HH:mm") + " 초기화 (" + $dStr + $wspan.Hours + "h " + $wspan.Minutes + "m 남음)"
+                    }
+                } elseif ($wft -gt [DateTime]::MinValue) {
+                    # 롤링 7일 기준
                     $weekExpiry = $wft.AddDays(7)
                     $wspan = $weekExpiry - $now
                     if ($wspan.TotalSeconds -le 0) {
                         $SyncState.TimeUntilWeeklyResetStr = "7일 경과 - 다음 사용 시 새 주간 윈도우 시작"
                     } else {
-                        $SyncState.TimeUntilWeeklyResetStr = $wft.ToString("MM/dd HH:mm") + " 첫 사용 -> " + $weekExpiry.ToString("MM/dd HH:mm") + " 복구 (" + $wspan.Days + "일 " + $wspan.Hours + "h 남음)"
+                        $dStr2 = if ($wspan.Days -gt 0) { $wspan.Days.ToString() + "일 " } else { "" }
+                        $SyncState.TimeUntilWeeklyResetStr = $wft.ToString("MM/dd HH:mm") + " 첫 사용 -> " + $weekExpiry.ToString("MM/dd HH:mm") + " 복구 (" + $dStr2 + $wspan.Hours + "h " + $wspan.Minutes + "m 남음)"
                     }
                 } else {
                     $SyncState.TimeUntilWeeklyResetStr = "주간 사용 기록 없음"
@@ -593,7 +629,7 @@ try {
     function Show-SettingsDialog {
         $f = New-Object System.Windows.Forms.Form
         $f.Text = "Gemini Token Monitor - 설정"
-        $f.Size = New-Object System.Drawing.Size(540, 740)
+        $f.Size = New-Object System.Drawing.Size(540, 760)
         $f.StartPosition = "CenterScreen"; $f.FormBorderStyle = "FixedSingle"
         $f.MaximizeBox = $false; $f.BackColor = [System.Drawing.Color]::FromArgb(30, 33, 40)
 
@@ -644,28 +680,44 @@ try {
         $lblPct2.Location = New-Object System.Drawing.Point(258, 258); $lblPct2.AutoSize = $true; $f.Controls.Add($lblPct2)
         Add-SubLabel $f "주간 첫사용 시각부터 7일 롤링. 보정 내역은 calibration_log.jsonl에 기록됩니다." 20 280
 
-        Add-Label $f "─────────────────────────────────────────────────" 20 310
-        Add-Label $f "고급 설정" 20 325 $true
+        Add-Label $f "⏱️ 주간 초기화까지 남은 시간 (분, 비워두면 자동 7일 롤링):" 20 302
+        Add-SubLabel $f "Gemini UI에서 확인한 남은 분(예: 2880 = 2일)을 입력하면 정확한 종료 시각을 계산합니다." 20 320
+        $txtWkExpMin = Add-Input $f 20 337 150 $(
+            if ($Global:State.WeeklyExpiryTime -gt [DateTime]::Now) {
+                [int]($Global:State.WeeklyExpiryTime - [DateTime]::Now).TotalMinutes
+            } else { "" }
+        )
+        $lblWkExpInfo = New-Object System.Windows.Forms.Label
+        $lblWkExpInfo.ForeColor = [System.Drawing.Color]::FromArgb(100, 200, 255)
+        $lblWkExpInfo.Font = New-Object System.Drawing.Font("맑은 고딕", 8.5)
+        $lblWkExpInfo.Location = New-Object System.Drawing.Point(180, 341); $lblWkExpInfo.AutoSize = $true
+        $lblWkExpInfo.Text = if ($Global:State.WeeklyExpiryTime -gt [DateTime]::Now) {
+            "현재: " + $Global:State.WeeklyExpiryTime.ToString("MM/dd HH:mm") + " 초기화 예정"
+        } else { "" }
+        $f.Controls.Add($lblWkExpInfo)
 
-        Add-Label $f "갱신 주기 (초, 기본 60):" 20 350
-        $txtInterval = Add-Input $f 20 368 200 $Global:Config.checkIntervalSeconds
+        Add-Label $f "─────────────────────────────────────────────────" 20 370
+        Add-Label $f "고급 설정" 20 385 $true
 
-        Add-Label $f "DB 크기 -> 토큰 비율 (tok/KB, 기본 12):" 20 404
-        Add-SubLabel $f "5h % 보정 시 자동 역산. 수동 조정도 가능합니다." 20 422
-        $txtTokPerKB = Add-Input $f 20 440 200 $Global:Config.tokensPerKB
+        Add-Label $f "갱신 주기 (초, 기본 60):" 20 410
+        $txtInterval = Add-Input $f 20 428 200 $Global:Config.checkIntervalSeconds
 
-        Add-Label $f "─────────────────────────────────────────────────" 20 475
+        Add-Label $f "DB 크기 -> 토큰 비율 (tok/KB, 기본 12):" 20 464
+        Add-SubLabel $f "5h % 보정 시 자동 역산. 수동 조정도 가능합니다." 20 482
+        $txtTokPerKB = Add-Input $f 20 500 200 $Global:Config.tokensPerKB
+
+        Add-Label $f "─────────────────────────────────────────────────" 20 535
         $chkResetWeekly = New-Object System.Windows.Forms.CheckBox
-        $chkResetWeekly.Text = "주간 첫사용 시각 초기화 (다음 사용부터 새 7일 윈도우 시작)"
+        $chkResetWeekly.Text = "주간 첫사용 시각 + 수동 종료시각 초기화 (다음 사용부터 새 7일 윈도우 시작)"
         $chkResetWeekly.ForeColor = [System.Drawing.Color]::FromArgb(255, 200, 100)
         $chkResetWeekly.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
-        $chkResetWeekly.Location = New-Object System.Drawing.Point(20, 492); $chkResetWeekly.AutoSize = $true
+        $chkResetWeekly.Location = New-Object System.Drawing.Point(20, 552); $chkResetWeekly.AutoSize = $true
         $f.Controls.Add($chkResetWeekly)
 
         $btnSave = New-Object System.Windows.Forms.Button
         $btnSave.Text = "저장 및 즉시 갱신"
         $btnSave.Font = New-Object System.Drawing.Font("맑은 고딕", 10, [System.Drawing.FontStyle]::Bold)
-        $btnSave.Location = New-Object System.Drawing.Point(340, 650)
+        $btnSave.Location = New-Object System.Drawing.Point(340, 680)
         $btnSave.Size = New-Object System.Drawing.Size(160, 36)
         $btnSave.ForeColor = [System.Drawing.Color]::White
         $btnSave.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
@@ -729,10 +781,24 @@ try {
             # 주간 첫사용 초기화
             if ($chkResetWeekly.Checked) {
                 $Global:State.WeeklyFirstUseTime = [DateTime]::MinValue
+                $Global:State.WeeklyExpiryTime   = [DateTime]::MinValue
                 $Global:State.HasCalibWk = $false; $Global:State.CalibWkUsed = 0L
                 $sc3 | Add-Member -Force NotePropertyName weeklyFirstUseTime -NotePropertyValue $null
+                $sc3 | Add-Member -Force NotePropertyName weeklyExpiryTime   -NotePropertyValue $null
                 $sc3 | Add-Member -Force NotePropertyName calibWk -NotePropertyValue $null
-                Write-Log "주간 첫사용 시각 사용자 초기화"
+                Write-Log "주간 첫사용 시각 + 종료시각 사용자 초기화"
+            }
+
+            # 주간 종료 시각 수동 설정 (분 단위 입력)
+            $vWkMin = $txtWkExpMin.Text.Trim()
+            if ($vWkMin -ne "" -and $vWkMin -match '^\d+$') {
+                $expMins = [int]$vWkMin
+                if ($expMins -gt 0) {
+                    $expiryTime = $now.AddMinutes($expMins)
+                    $Global:State.WeeklyExpiryTime = $expiryTime
+                    $sc3 | Add-Member -Force NotePropertyName weeklyExpiryTime -NotePropertyValue $expiryTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                    Write-Log "주간 종료 시각 수동 설정: $($expiryTime.ToString('MM/dd HH:mm')) (${expMins}분 후)"
+                }
             }
 
             Save-StateCache -Cache $sc3

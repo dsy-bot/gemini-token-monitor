@@ -151,6 +151,9 @@ try {
         CalibWkScanKB           = 0L
         HasCalib5h              = $false
         HasCalibWk              = $false
+        # 오늘 소모 베이스라인 (daily_usage.json에서 복원. 스캔 증분에 더해짐)
+        DailyBaselineTokens     = 0L
+        DailyBaselineDate       = [DateTime]::Today
     })
 
     # ==========================================================================
@@ -215,8 +218,9 @@ try {
             if ($rawJ.PSObject.Properties[$todayStr]) {
                 $cachedToday = [long]$rawJ.PSObject.Properties[$todayStr].Value.Tokens
                 $Global:State.TokensUsedToday      = $cachedToday
-                $Global:State.TokensUsed5Hours     = $cachedToday
                 $Global:State.LastSavedDailyTokens = $cachedToday
+                $Global:State.DailyBaselineTokens  = $cachedToday  # 스캔 증분 계산 기준점
+                $Global:State.DailyBaselineDate    = [DateTime]::Today
                 $max5h = $Global:Config.rolling5HourQuotaTokens
                 $p5h   = [int][math]::Floor([math]::Max(0, $max5h - $cachedToday) / $max5h * 100)
                 if ($cachedToday -gt 0 -and $p5h -ge 100) { $p5h = 99 }
@@ -317,10 +321,19 @@ try {
                 $start5h = $now.AddHours(-5)
                 $start7d = $today.AddDays(-7)
 
-                $tokensToday   = 0L
-                $tokens5h      = 0L
-                $requestsToday = 0
-                $firstActivity = [DateTime]::MaxValue
+                # ── 날짜 롤오버 감지: 자정 이후 첫 스캔이면 캐시 초기화 ──
+                if ($SyncState.DailyBaselineDate -lt $today) {
+                    $SyncState.DailyBaselineTokens = 0L
+                    $SyncState.DailyBaselineDate   = $today
+                    $SyncState.FileOffsetCache.Clear()
+                    $SyncState.FileTokenCache.Clear()
+                    $SyncState.LastSavedDailyTokens = -1
+                }
+
+                $tokensFromScan = 0L   # 이번 세션 DB 증분 누적
+                $tokens5h       = 0L
+                $requestsToday  = 0
+                $firstActivity  = [DateTime]::MaxValue
 
                 $convDir  = [System.IO.Path]::Combine($env:USERPROFILE, ".gemini", "antigravity", "conversations")
                 $tokPerKB = if ($SyncConfig.ContainsKey('tokensPerKB') -and $SyncConfig.tokensPerKB -gt 0) {
@@ -347,7 +360,9 @@ try {
                             if ($SyncState.FileTokenCache.ContainsKey($dbKey)) { $cachedTotal = $SyncState.FileTokenCache[$dbKey] }
 
                             $newTotal = if ($prevSizeKB -eq 0L) {
-                                if ($dbLW -ge $today) { $curSizeKB * $tokPerKB } else { 0L }
+                                # ✅ 첫 발견: 베이스라인만 기록, 기존 바이트는 세지 않음
+                                # (이전 세션 사용량은 DailyBaselineTokens에 이미 반영)
+                                0L
                             } elseif ($curSizeKB -gt $prevSizeKB) {
                                 $cachedTotal + (($curSizeKB - $prevSizeKB) * $tokPerKB)
                             } else { $cachedTotal }
@@ -357,7 +372,7 @@ try {
                             if ($newTotal -le 0) { continue }
 
                             if ($dbLW -ge $today) {
-                                $tokensToday += $newTotal
+                                $tokensFromScan += $newTotal   # 이번 세션 증분만
                                 if ($curSizeKB -gt $prevSizeKB) {
                                     $requestsToday += [math]::Max(1, [int](($curSizeKB - $prevSizeKB) / 8))
                                 }
@@ -368,7 +383,10 @@ try {
                     }
                 }
 
-                # 5h 보정 적용
+                # ✅ 오늘 소모 = 이전 세션 저장값(베이스라인) + 이번 세션 증분
+                $tokensToday = $SyncState.DailyBaselineTokens + $tokensFromScan
+
+                # 5h 보정 적용 (보정이 있으면 override)
                 if ($SyncState.HasCalib5h) {
                     $kbDelta5h = [math]::Max(0L, $totalCurrentKB - $SyncState.Calib5hScanKB)
                     $tokens5h  = $SyncState.Calib5hUsed + ($kbDelta5h * $tokPerKB)
@@ -756,8 +774,8 @@ try {
                     }
                 }
 
-                $sc3 | Add-Member -Force NotePropertyName calib5h -NotePropertyValue ([pscustomobject]@{
-                    timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derived5h; scanKB = $scanKBNow; pct = $pct5h })
+                $calib5hObj = [pscustomobject]@{ timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derived5h; scanKB = $scanKBNow; pct = $pct5h }
+                $sc3 | Add-Member -MemberType NoteProperty -Name "calib5h" -Value $calib5hObj -Force
             }
 
             # 주간 % 보정
@@ -774,8 +792,8 @@ try {
                 $Global:State.CalibWkScanKB = $scanKBNow
                 $Global:State.HasCalibWk    = $true
 
-                $sc3 | Add-Member -Force NotePropertyName calibWk -NotePropertyValue ([pscustomobject]@{
-                    timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derivedWk; scanKB = $scanKBNow; pct = $pctWk })
+                $calibWkObj = [pscustomobject]@{ timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derivedWk; scanKB = $scanKBNow; pct = $pctWk }
+                $sc3 | Add-Member -MemberType NoteProperty -Name "calibWk" -Value $calibWkObj -Force
             }
 
             # 주간 첫사용 초기화
@@ -783,9 +801,9 @@ try {
                 $Global:State.WeeklyFirstUseTime = [DateTime]::MinValue
                 $Global:State.WeeklyExpiryTime   = [DateTime]::MinValue
                 $Global:State.HasCalibWk = $false; $Global:State.CalibWkUsed = 0L
-                $sc3 | Add-Member -Force NotePropertyName weeklyFirstUseTime -NotePropertyValue $null
-                $sc3 | Add-Member -Force NotePropertyName weeklyExpiryTime   -NotePropertyValue $null
-                $sc3 | Add-Member -Force NotePropertyName calibWk -NotePropertyValue $null
+                $sc3 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $null -Force
+                $sc3 | Add-Member -MemberType NoteProperty -Name "weeklyExpiryTime"   -Value $null -Force
+                $sc3 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null -Force
                 Write-Log "주간 첫사용 시각 + 종료시각 사용자 초기화"
             }
 
@@ -794,9 +812,10 @@ try {
             if ($vWkMin -ne "" -and $vWkMin -match '^\d+$') {
                 $expMins = [int]$vWkMin
                 if ($expMins -gt 0) {
-                    $expiryTime = $now.AddMinutes($expMins)
+                    $expiryTime    = $now.AddMinutes($expMins)
+                    $expiryTimeStr = $expiryTime.ToString("yyyy-MM-ddTHH:mm:ss")
                     $Global:State.WeeklyExpiryTime = $expiryTime
-                    $sc3 | Add-Member -Force NotePropertyName weeklyExpiryTime -NotePropertyValue $expiryTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                    $sc3 | Add-Member -MemberType NoteProperty -Name "weeklyExpiryTime" -Value $expiryTimeStr -Force
                     Write-Log "주간 종료 시각 수동 설정: $($expiryTime.ToString('MM/dd HH:mm')) (${expMins}분 후)"
                 }
             }

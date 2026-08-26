@@ -401,7 +401,8 @@ try {
                             $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
                                 [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
                             } else { [pscustomobject]@{} }
-                            $sc2 | Add-Member -Force NotePropertyName weeklyFirstUseTime -NotePropertyValue $firstActivity.ToString("yyyy-MM-ddTHH:mm:ss")
+                            $wftStr = $firstActivity.ToString("yyyy-MM-ddTHH:mm:ss")
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $wftStr -Force
                             [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
                         } catch {}
                     } elseif (($now - $wft).TotalDays -gt 7) {
@@ -412,8 +413,9 @@ try {
                             $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
                                 [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
                             } else { [pscustomobject]@{} }
-                            $sc2 | Add-Member -Force NotePropertyName weeklyFirstUseTime -NotePropertyValue $firstActivity.ToString("yyyy-MM-ddTHH:mm:ss")
-                            $sc2 | Add-Member -Force NotePropertyName calibWk -NotePropertyValue $null
+                            $wftStr2 = $firstActivity.ToString("yyyy-MM-ddTHH:mm:ss")
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $wftStr2 -Force
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null   -Force
                             [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
                         } catch {}
                     }
@@ -490,9 +492,9 @@ try {
                             $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
                                 [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
                             } else { [pscustomobject]@{} }
-                            $sc2 | Add-Member -Force NotePropertyName weeklyExpiryTime    -NotePropertyValue $null
-                            $sc2 | Add-Member -Force NotePropertyName weeklyFirstUseTime  -NotePropertyValue $null
-                            $sc2 | Add-Member -Force NotePropertyName calibWk             -NotePropertyValue $null
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyExpiryTime"   -Value $null -Force
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $null -Force
+                            $sc2 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null -Force
                             [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
                         } catch {}
                     } else {
@@ -827,10 +829,10 @@ try {
                 $raw = if ([System.IO.File]::Exists($Global:Config.ConfigFile)) {
                     [System.IO.File]::ReadAllText($Global:Config.ConfigFile) | ConvertFrom-Json
                 } else { [pscustomobject]@{} }
-                $raw | Add-Member -Force NotePropertyName rolling5HourQuotaTokens -NotePropertyValue $Global:Config.rolling5HourQuotaTokens
-                $raw | Add-Member -Force NotePropertyName weeklyQuotaTokens       -NotePropertyValue $Global:Config.weeklyQuotaTokens
-                $raw | Add-Member -Force NotePropertyName tokensPerKB             -NotePropertyValue $Global:Config.tokensPerKB
-                $raw | Add-Member -Force NotePropertyName checkIntervalSeconds    -NotePropertyValue $Global:Config.checkIntervalSeconds
+                $raw | Add-Member -MemberType NoteProperty -Name "rolling5HourQuotaTokens" -Value $Global:Config.rolling5HourQuotaTokens -Force
+                $raw | Add-Member -MemberType NoteProperty -Name "weeklyQuotaTokens"       -Value $Global:Config.weeklyQuotaTokens       -Force
+                $raw | Add-Member -MemberType NoteProperty -Name "tokensPerKB"             -Value $Global:Config.tokensPerKB             -Force
+                $raw | Add-Member -MemberType NoteProperty -Name "checkIntervalSeconds"    -Value $Global:Config.checkIntervalSeconds    -Force
                 [System.IO.File]::WriteAllText($Global:Config.ConfigFile, ($raw | ConvertTo-Json -Depth 5), [System.Text.Encoding]::UTF8)
                 Write-Log "설정 저장 완료"
             } catch { Write-Log "설정 저장 오류: $($_.Exception.Message)" }

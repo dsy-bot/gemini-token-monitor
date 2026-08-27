@@ -24,6 +24,7 @@ $LogFile        = Join-Path $ScriptDir "monitor.log"
 $HistoryFile    = Join-Path $ScriptDir "daily_usage.json"
 $StateCacheFile = Join-Path $ScriptDir "state_cache.json"
 $CalibLogFile   = Join-Path $ScriptDir "calibration_log.jsonl"
+$UsageLogFile   = Join-Path $ScriptDir "usage_log.jsonl"
 
 # ==============================================================================
 # 로깅 (200KB 초과 시 뒤쪽 절반만 유지)
@@ -98,6 +99,7 @@ try {
         HistoryFile                    = $HistoryFile
         StateCacheFile                 = $StateCacheFile
         CalibLogFile                   = $CalibLogFile
+        UsageLogFile                   = $UsageLogFile
         LogFile                        = $LogFile
     })
 
@@ -173,7 +175,14 @@ try {
         } catch {}
     }
 
-
+    # FileOffsetCache 복원
+    if ($null -ne $sc.PSObject.Properties['fileOffsets'] -and $null -ne $sc.fileOffsets) {
+        try {
+            foreach ($prop in $sc.fileOffsets.PSObject.Properties) {
+                $Global:State.FileOffsetCache[$prop.Name] = [long]$prop.Value
+            }
+        } catch {}
+    }
 
     # daily_usage.json 오늘 + 주간 즉시 복원
     if (Test-Path $HistoryFile) {
@@ -299,9 +308,9 @@ try {
                 }
 
                 $tokensFromScan = 0L   # 이번 세션 DB 증분 누적
-                $tokens5h       = 0L
                 $requestsToday  = 0
                 $firstActivity  = [DateTime]::MaxValue
+                $cycleDelta     = 0L   # 이번 스캔 주기의 증분
 
                 $convDir  = [System.IO.Path]::Combine($env:USERPROFILE, ".gemini", "antigravity", "conversations")
                 $tokPerKB = if ($SyncConfig.ContainsKey('tokensPerKB') -and $SyncConfig.tokensPerKB -gt 0) {
@@ -319,7 +328,12 @@ try {
 
                             $dbKey      = $dbPath
                             $prevSizeKB = 0L
-                            if ($SyncState.FileOffsetCache.ContainsKey($dbKey)) { $prevSizeKB = $SyncState.FileOffsetCache[$dbKey] }
+                            $isNewFile  = $false
+                            if ($SyncState.FileOffsetCache.ContainsKey($dbKey)) { 
+                                $prevSizeKB = $SyncState.FileOffsetCache[$dbKey] 
+                            } else {
+                                $isNewFile = $true
+                            }
                             $curSizeKB = [long]($dbInfo.Length / 1024)
 
                             if ($dbLW -ge $today) { $totalCurrentKB += $curSizeKB }
@@ -327,29 +341,65 @@ try {
                             $cachedTotal = 0L
                             if ($SyncState.FileTokenCache.ContainsKey($dbKey)) { $cachedTotal = $SyncState.FileTokenCache[$dbKey] }
 
-                            $newTotal = if ($prevSizeKB -eq 0L) {
-                                # ✅ 첫 발견: 베이스라인만 기록, 기존 바이트는 세지 않음
-                                # (이전 세션 사용량은 DailyBaselineTokens에 이미 반영)
+                            $deltaTokens = 0L
+                            $newTotal = if ($isNewFile) {
+                                # 첫 발견: 베이스라인만 기록, 기존 바이트는 세지 않음
                                 0L
                             } elseif ($curSizeKB -gt $prevSizeKB) {
-                                $cachedTotal + (($curSizeKB - $prevSizeKB) * $tokPerKB)
+                                $deltaTokens = ($curSizeKB - $prevSizeKB) * $tokPerKB
+                                $cachedTotal + $deltaTokens
                             } else { $cachedTotal }
 
                             $SyncState.FileOffsetCache[$dbKey] = $curSizeKB
                             $SyncState.FileTokenCache[$dbKey]  = $newTotal
+
+                            if ($deltaTokens -gt 0) { $cycleDelta += $deltaTokens }
+
                             if ($newTotal -le 0) { continue }
 
                             if ($dbLW -ge $today) {
                                 $tokensFromScan += $newTotal   # 이번 세션 증분만
-                                if ($curSizeKB -gt $prevSizeKB) {
-                                    $requestsToday += [math]::Max(1, [int](($curSizeKB - $prevSizeKB) / 8))
+                                if ($deltaTokens -gt 0) {
+                                    $requestsToday += [math]::Max(1, [int]($deltaTokens / $tokPerKB / 8))
                                 }
                                 if ($dbLW -lt $firstActivity) { $firstActivity = $dbLW }
                             }
-                            if ($dbLW -ge $start5h) { $tokens5h += $newTotal }
                         } catch {}
                     }
                 }
+
+                # cycleDelta를 usage_log.jsonl에 기록
+                if ($cycleDelta -gt 0) {
+                    $logEntry = [pscustomobject]@{ t = $now.ToString("yyyy-MM-ddTHH:mm:ss"); v = $cycleDelta }
+                    try {
+                        ($logEntry | ConvertTo-Json -Compress) | Out-File -FilePath $SyncConfig.UsageLogFile -Append -Encoding UTF8
+                    } catch {}
+                }
+
+                # tokens5h를 usage_log.jsonl에서 역산 (최근 5시간 합산)
+                $tokens5h = 0L
+                try {
+                    if ([System.IO.File]::Exists($SyncConfig.UsageLogFile)) {
+                        $validLines = [System.Collections.Generic.List[string]]::new()
+                        $rewrite = $false
+                        foreach ($line in [System.IO.File]::ReadLines($SyncConfig.UsageLogFile)) {
+                            if ($line.Trim() -eq "") { continue }
+                            try {
+                                $entry = $line | ConvertFrom-Json
+                                $entryTime = [DateTime]::Parse($entry.t)
+                                if ($entryTime -ge $start7d) {
+                                    $validLines.Add($line)
+                                    if ($entryTime -ge $start5h) {
+                                        $tokens5h += [long]$entry.v
+                                    }
+                                } else { $rewrite = $true }
+                            } catch {}
+                        }
+                        if ($rewrite) {
+                            [System.IO.File]::WriteAllLines($SyncConfig.UsageLogFile, $validLines)
+                        }
+                    }
+                } catch {}
 
                 # ✅ 오늘 소모 = 이전 세션 저장값(베이스라인) + 이번 세션 증분
                 $tokensToday = $SyncState.DailyBaselineTokens + $tokensFromScan
@@ -503,6 +553,20 @@ try {
                         $SyncState.LastSavedDailyTokens = $tokensToday
                     } catch {}
                 }
+
+                # state_cache.json 주기적 저장 (앱 재시작 시 오프셋 유지를 위해)
+                try {
+                    $sc3 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
+                        [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
+                    } else { [pscustomobject]@{} }
+                    
+                    # clone to avoid serialization lock issues
+                    $cloneOffsets = [ordered]@{}
+                    foreach ($k in $SyncState.FileOffsetCache.Keys) { $cloneOffsets[$k] = $SyncState.FileOffsetCache[$k] }
+                    
+                    $sc3 | Add-Member -MemberType NoteProperty -Name "fileOffsets" -Value $cloneOffsets -Force
+                    [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc3 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
+                } catch {}
             } catch {}
             $SyncState.IsScanning = $false
         }
@@ -552,7 +616,7 @@ try {
             $weeklyUsed = [math]::Max(0L, $st.TokensThisWeek)
             $remWkTok   = [math]::Max(0, $cfg.weeklyQuotaTokens - $weeklyUsed)
             $wftStr     = if ($st.WeeklyFirstUseTime -gt [DateTime]::MinValue) { $st.WeeklyFirstUseTime.ToString("MM/dd HH:mm") } else { "기록없음" }
-            @(
+            $lines = @(
                 "======================================================",
                 "      Gemini Token Monitor  v2.1 - 실시간 현황",
                 "======================================================",
@@ -571,8 +635,27 @@ try {
                 "",
                 "-- 위험도 -------------------------------------------",
                 ("  상태       : " + $(switch ($st.RiskLevel) { "RED" {"[위험] 쿼터 소진 임박"} "YELLOW" {"[주의] 25% 미만 잔여"} default {"[정상] 안전"} })),
-                "======================================================"
-            ) -join "`r`n"
+                "======================================================",
+                ""
+            )
+
+            # 로그 표시 (최근 5건)
+            try {
+                if ([System.IO.File]::Exists($cfg.UsageLogFile)) {
+                    $logLines = [System.IO.File]::ReadAllLines($cfg.UsageLogFile)
+                    if ($logLines.Length -gt 0) {
+                        $lines += "-- 최근 소모 로그 (최대 5건) ------------------------"
+                        $startIdx = [math]::Max(0, $logLines.Length - 5)
+                        for ($i = $logLines.Length - 1; $i -ge $startIdx; $i--) {
+                            if ($logLines[$i].Trim() -eq "") { continue }
+                            $entry = $logLines[$i] | ConvertFrom-Json
+                            $lines += "  [" + [DateTime]::Parse($entry.t).ToString("MM/dd HH:mm:ss") + "]  " + [long]$entry.v + " tok 소모"
+                        }
+                    }
+                }
+            } catch {}
+
+            $lines -join "`r`n"
         }
 
         $tb.Text = Build-StatusText

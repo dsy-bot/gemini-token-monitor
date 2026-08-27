@@ -2,3 +2,5 @@
 {"timestamp":"2026-08-25T14:29:56","type":"weekly","inputPercent":99,"quota":42565486,"derivedUsed":425655,"note":"user input"}
 {"timestamp":"2026-08-25T17:19:53","type":"5h","inputPercent":83,"quota":1375304,"derivedUsed":233802,"note":"user input"}
 {"timestamp":"2026-08-25T17:19:53","type":"weekly","inputPercent":96,"quota":42565486,"derivedUsed":1702619,"note":"user input"}
+{"timestamp":"2026-08-26T17:10:31","type":"5h","inputPercent":82,"quota":1375304,"derivedUsed":247555,"note":"user input"}
+{"timestamp":"2026-08-26T17:10:31","type":"weekly","inputPercent":88,"quota":42565486,"derivedUsed":5107858,"note":"user input"}

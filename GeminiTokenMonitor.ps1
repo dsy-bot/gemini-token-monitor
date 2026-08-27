@@ -143,14 +143,6 @@ try {
         FileOffsetCache         = [hashtable]::Synchronized(@{})
         FileTokenCache          = [hashtable]::Synchronized(@{})
         LastSavedDailyTokens    = -1
-        Calib5hUsed             = 0L
-        Calib5hTime             = [DateTime]::MinValue
-        Calib5hScanKB           = 0L
-        CalibWkUsed             = 0L
-        CalibWkTime             = [DateTime]::MinValue
-        CalibWkScanKB           = 0L
-        HasCalib5h              = $false
-        HasCalibWk              = $false
         # 오늘 소모 베이스라인 (daily_usage.json에서 복원. 스캔 증분에 더해짐)
         DailyBaselineTokens     = 0L
         DailyBaselineDate       = [DateTime]::Today
@@ -181,31 +173,7 @@ try {
         } catch {}
     }
 
-    # 5h 보정 복원 (5시간 이내)
-    if ($sc.calib5h -ne $null -and "$($sc.calib5h)" -ne "") {
-        try {
-            $ct = [DateTime]::Parse($sc.calib5h.timestamp)
-            if (([DateTime]::Now - $ct).TotalHours -le 5) {
-                $Global:State.Calib5hUsed   = [long]$sc.calib5h.usedTokens
-                $Global:State.Calib5hTime   = $ct
-                $Global:State.Calib5hScanKB = [long]$sc.calib5h.scanKB
-                $Global:State.HasCalib5h    = $true
-            }
-        } catch {}
-    }
 
-    # 주간 보정 복원 (7일 이내)
-    if ($sc.calibWk -ne $null -and "$($sc.calibWk)" -ne "") {
-        try {
-            $ct = [DateTime]::Parse($sc.calibWk.timestamp)
-            if (([DateTime]::Now - $ct).TotalDays -le 7) {
-                $Global:State.CalibWkUsed   = [long]$sc.calibWk.usedTokens
-                $Global:State.CalibWkTime   = $ct
-                $Global:State.CalibWkScanKB = [long]$sc.calibWk.scanKB
-                $Global:State.HasCalibWk    = $true
-            }
-        } catch {}
-    }
 
     # daily_usage.json 오늘 + 주간 즉시 복원
     if (Test-Path $HistoryFile) {
@@ -386,12 +354,6 @@ try {
                 # ✅ 오늘 소모 = 이전 세션 저장값(베이스라인) + 이번 세션 증분
                 $tokensToday = $SyncState.DailyBaselineTokens + $tokensFromScan
 
-                # 5h 보정 적용 (보정이 있으면 override)
-                if ($SyncState.HasCalib5h) {
-                    $kbDelta5h = [math]::Max(0L, $totalCurrentKB - $SyncState.Calib5hScanKB)
-                    $tokens5h  = $SyncState.Calib5hUsed + ($kbDelta5h * $tokPerKB)
-                }
-
                 # 주간 첫사용 시각 감지/저장
                 $wft = $SyncState.WeeklyFirstUseTime
                 if ($firstActivity -lt [DateTime]::MaxValue) {
@@ -408,14 +370,12 @@ try {
                     } elseif (($now - $wft).TotalDays -gt 7) {
                         # 7일 경과 -> 주간 리셋
                         $SyncState.WeeklyFirstUseTime = $firstActivity; $wft = $firstActivity
-                        $SyncState.HasCalibWk = $false; $SyncState.CalibWkUsed = 0L
                         try {
                             $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
                                 [System.IO.File]::ReadAllText($SyncConfig.StateCacheFile) | ConvertFrom-Json
                             } else { [pscustomobject]@{} }
                             $wftStr2 = $firstActivity.ToString("yyyy-MM-ddTHH:mm:ss")
                             $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $wftStr2 -Force
-                            $sc2 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null   -Force
                             [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
                         } catch {}
                     }
@@ -425,29 +385,23 @@ try {
                 $maxWk = [long]$SyncConfig.weeklyQuotaTokens
                 $tokensThisWeek = $tokensToday
 
-                if ($SyncState.HasCalibWk) {
-                    $kbDeltaWk      = [math]::Max(0L, $totalCurrentKB - $SyncState.CalibWkScanKB)
-                    $tokensThisWeek = $SyncState.CalibWkUsed + ($kbDeltaWk * $tokPerKB)
-                } else {
-                    try {
-                        $histFile2 = $SyncConfig.HistoryFile
-                        if ([System.IO.File]::Exists($histFile2)) {
-                            $histJson  = [System.IO.File]::ReadAllText($histFile2) | ConvertFrom-Json
-                            $todayStr2 = $now.ToString("yyyy-MM-dd")
-                            $wftDate   = if ($wft -gt [DateTime]::MinValue) { $wft.Date } else { $today.AddDays(-7) }
-                            foreach ($pr in $histJson.PSObject.Properties) {
-                                if ($pr.Name -eq $todayStr2) { continue }
-                                try {
-                                    $ed = [DateTime]::ParseExact($pr.Name, "yyyy-MM-dd", $null)
-                                    if ($ed.Date -ge $wftDate -and $ed.Date -lt $today) {
-                                        $tokensThisWeek += [long]$pr.Value.Tokens
-                                    }
-                                } catch {}
-                            }
+                try {
+                    $histFile2 = $SyncConfig.HistoryFile
+                    if ([System.IO.File]::Exists($histFile2)) {
+                        $histJson  = [System.IO.File]::ReadAllText($histFile2) | ConvertFrom-Json
+                        $todayStr2 = $now.ToString("yyyy-MM-dd")
+                        $wftDate   = if ($wft -gt [DateTime]::MinValue) { $wft.Date } else { $today.AddDays(-7) }
+                        foreach ($pr in $histJson.PSObject.Properties) {
+                            if ($pr.Name -eq $todayStr2) { continue }
+                            try {
+                                $ed = [DateTime]::ParseExact($pr.Name, "yyyy-MM-dd", $null)
+                                if ($ed.Date -ge $wftDate -and $ed.Date -lt $today) {
+                                    $tokensThisWeek += [long]$pr.Value.Tokens
+                                }
+                            } catch {}
                         }
-                    } catch {}
-                }
-
+                    }
+                } catch {}
                 # % 계산
                 $max5h = [long]$SyncConfig.rolling5HourQuotaTokens
                 $rem5h = [math]::Max(0L, $max5h - $tokens5h)
@@ -486,7 +440,6 @@ try {
                         # 종료 시각 경과 → 주간 리셋
                         $SyncState.WeeklyExpiryTime  = [DateTime]::MinValue
                         $SyncState.WeeklyFirstUseTime = [DateTime]::MinValue
-                        $SyncState.HasCalibWk = $false; $SyncState.CalibWkUsed = 0L
                         $SyncState.TimeUntilWeeklyResetStr = "주간 초기화 완료 - 다음 사용 시 새 7일 윈도우 시작"
                         try {
                             $sc2 = if ([System.IO.File]::Exists($SyncConfig.StateCacheFile)) {
@@ -494,7 +447,6 @@ try {
                             } else { [pscustomobject]@{} }
                             $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyExpiryTime"   -Value $null -Force
                             $sc2 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $null -Force
-                            $sc2 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null -Force
                             [System.IO.File]::WriteAllText($SyncConfig.StateCacheFile, ($sc2 | ConvertTo-Json -Depth 4), [System.Text.Encoding]::UTF8)
                         } catch {}
                     } else {
@@ -600,8 +552,6 @@ try {
             $weeklyUsed = [math]::Max(0L, $st.TokensThisWeek)
             $remWkTok   = [math]::Max(0, $cfg.weeklyQuotaTokens - $weeklyUsed)
             $wftStr     = if ($st.WeeklyFirstUseTime -gt [DateTime]::MinValue) { $st.WeeklyFirstUseTime.ToString("MM/dd HH:mm") } else { "기록없음" }
-            $c5hStr     = if ($st.HasCalib5h) { "[보정:" + $st.Calib5hTime.ToString("HH:mm") + "]" } else { "[DB추정]" }
-            $cWkStr     = if ($st.HasCalibWk) { "[보정:" + $st.CalibWkTime.ToString("HH:mm") + "]" } else { "[daily합산]" }
             @(
                 "======================================================",
                 "      Gemini Token Monitor  v2.1 - 실시간 현황",
@@ -610,8 +560,8 @@ try {
                 "",
                 "-- 쿼터 잔여 ----------------------------------------",
                 ("  오늘 소모   : " + $st.TokensUsedToday.ToString("#,##0") + " tok  (요청 " + $st.RequestCountToday + "회)"),
-                ("  5h  잔여   : " + $st.Remaining5HourPercent + "%  (" + $rem5hTok.ToString("#,##0") + " / " + $cfg.rolling5HourQuotaTokens.ToString("#,##0") + " tok) " + $c5hStr),
-                ("  주간 잔여   : " + $st.RemainingWeeklyPercent + "%  (" + $remWkTok.ToString("#,##0") + " / " + $cfg.weeklyQuotaTokens.ToString("#,##0") + " tok) " + $cWkStr),
+                ("  5h  잔여   : " + $st.Remaining5HourPercent + "%  (" + $rem5hTok.ToString("#,##0") + " / " + $cfg.rolling5HourQuotaTokens.ToString("#,##0") + " tok)"),
+                ("  주간 잔여   : " + $st.RemainingWeeklyPercent + "%  (" + $remWkTok.ToString("#,##0") + " / " + $cfg.weeklyQuotaTokens.ToString("#,##0") + " tok)"),
                 ("    이번주 소모: " + $weeklyUsed.ToString("#,##0") + " tok  | 주간 첫사용: " + $wftStr),
                 "",
                 "-- 리셋 카운트다운 ----------------------------------",
@@ -753,59 +703,40 @@ try {
             $scanKBNow = 0L
             foreach ($v in $Global:State.FileOffsetCache.Values) { $scanKBNow += [long]$v }
 
-            # 5h % 보정
+            # 5h % 입력으로 쿼터 자동 계산
             $v5h = $txt5hPct.Text.Trim()
             if ($v5h -ne "" -and $v5h -match '^\d+(\.\d+)?$') {
-                $pct5h     = [double]$v5h
-                $quota5h   = [long]$Global:Config.rolling5HourQuotaTokens
-                $derived5h = [long]($quota5h * (1.0 - $pct5h / 100.0))
-                if ($derived5h -lt 0) { $derived5h = 0L }
-
-                Write-CalibLog -Type "5h" -InputPct $pct5h -Quota $quota5h -DerivedUsed $derived5h -Note "user input"
-                $Global:State.Calib5hUsed   = $derived5h
-                $Global:State.Calib5hTime   = $now
-                $Global:State.Calib5hScanKB = $scanKBNow
-                $Global:State.HasCalib5h    = $true
-
-                # tokensPerKB 역산
-                if ($scanKBNow -gt 0 -and $derived5h -gt 0) {
-                    $ratio = [math]::Round($derived5h / $scanKBNow)
-                    if ($ratio -ge 1 -and $ratio -le 500) {
-                        $Global:Config.tokensPerKB = [int]$ratio
-                        Write-Log "tokensPerKB 자동역산: $ratio (5h=$pct5h%)"
-                    }
+                $pct5h = [double]$v5h
+                $usedPct = 1.0 - ($pct5h / 100.0)
+                if ($usedPct -gt 0 -and $Global:State.TokensUsed5Hours -gt 0) {
+                    $newQuota5h = [long]($Global:State.TokensUsed5Hours / $usedPct)
+                    Write-CalibLog -Type "5h" -InputPct $pct5h -Quota $newQuota5h -DerivedUsed $Global:State.TokensUsed5Hours -Note "auto-calculated quota"
+                    $Global:Config.rolling5HourQuotaTokens = $newQuota5h
+                    $txt5hQ.Text = $newQuota5h.ToString()
+                    Write-Log "5h 쿼터 자동 보정: $newQuota5h (입력 $pct5h%, 사용 $($Global:State.TokensUsed5Hours))"
                 }
-
-                $calib5hObj = [pscustomobject]@{ timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derived5h; scanKB = $scanKBNow; pct = $pct5h }
-                $sc3 | Add-Member -MemberType NoteProperty -Name "calib5h" -Value $calib5hObj -Force
             }
 
-            # 주간 % 보정
+            # 주간 % 입력으로 쿼터 자동 계산
             $vWk = $txtWkPct.Text.Trim()
             if ($vWk -ne "" -and $vWk -match '^\d+(\.\d+)?$') {
-                $pctWk     = [double]$vWk
-                $quotaWk   = [long]$Global:Config.weeklyQuotaTokens
-                $derivedWk = [long]($quotaWk * (1.0 - $pctWk / 100.0))
-                if ($derivedWk -lt 0) { $derivedWk = 0L }
-
-                Write-CalibLog -Type "weekly" -InputPct $pctWk -Quota $quotaWk -DerivedUsed $derivedWk -Note "user input"
-                $Global:State.CalibWkUsed   = $derivedWk
-                $Global:State.CalibWkTime   = $now
-                $Global:State.CalibWkScanKB = $scanKBNow
-                $Global:State.HasCalibWk    = $true
-
-                $calibWkObj = [pscustomobject]@{ timestamp = $now.ToString("yyyy-MM-ddTHH:mm:ss"); usedTokens = $derivedWk; scanKB = $scanKBNow; pct = $pctWk }
-                $sc3 | Add-Member -MemberType NoteProperty -Name "calibWk" -Value $calibWkObj -Force
+                $pctWk = [double]$vWk
+                $usedPctWk = 1.0 - ($pctWk / 100.0)
+                if ($usedPctWk -gt 0 -and $Global:State.TokensThisWeek -gt 0) {
+                    $newQuotaWk = [long]($Global:State.TokensThisWeek / $usedPctWk)
+                    Write-CalibLog -Type "weekly" -InputPct $pctWk -Quota $newQuotaWk -DerivedUsed $Global:State.TokensThisWeek -Note "auto-calculated quota"
+                    $Global:Config.weeklyQuotaTokens = $newQuotaWk
+                    $txtWkQ.Text = $newQuotaWk.ToString()
+                    Write-Log "주간 쿼터 자동 보정: $newQuotaWk (입력 $pctWk%, 사용 $($Global:State.TokensThisWeek))"
+                }
             }
 
             # 주간 첫사용 초기화
             if ($chkResetWeekly.Checked) {
                 $Global:State.WeeklyFirstUseTime = [DateTime]::MinValue
                 $Global:State.WeeklyExpiryTime   = [DateTime]::MinValue
-                $Global:State.HasCalibWk = $false; $Global:State.CalibWkUsed = 0L
                 $sc3 | Add-Member -MemberType NoteProperty -Name "weeklyFirstUseTime" -Value $null -Force
                 $sc3 | Add-Member -MemberType NoteProperty -Name "weeklyExpiryTime"   -Value $null -Force
-                $sc3 | Add-Member -MemberType NoteProperty -Name "calibWk"            -Value $null -Force
                 Write-Log "주간 첫사용 시각 + 종료시각 사용자 초기화"
             }
 

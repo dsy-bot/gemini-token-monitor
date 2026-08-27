@@ -1,16 +1,16 @@
 ﻿{
-    "weeklyFirstUseTime":  null,
     "weeklyExpiryTime":  "2026-08-25T12:52:59",
+    "weeklyFirstUseTime":  "2026-08-26T09:30:38",
     "calib5h":  {
-                    "timestamp":  "2026-08-25T17:19:53",
-                    "usedTokens":  233802,
-                    "scanKB":  157272,
-                    "pct":  83
+                    "timestamp":  "2026-08-26T17:10:31",
+                    "usedTokens":  247555,
+                    "scanKB":  164876,
+                    "pct":  82
                 },
     "calibWk":  {
-                    "timestamp":  "2026-08-25T17:19:53",
-                    "usedTokens":  1702619,
-                    "scanKB":  157272,
-                    "pct":  96
+                    "timestamp":  "2026-08-26T17:10:31",
+                    "usedTokens":  5107858,
+                    "scanKB":  164876,
+                    "pct":  88
                 }
 }

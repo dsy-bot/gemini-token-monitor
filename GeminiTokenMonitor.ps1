@@ -133,10 +133,6 @@ try {
     function New-BatteryIcon {
         param([int]$Percent = 100, [string]$RiskLevel = "GREEN")
         try {
-            if ($Global:State.LastHIcon -ne [IntPtr]::Zero) {
-                [NativeMethods]::DestroyIcon($Global:State.LastHIcon) | Out-Null
-                $Global:State.LastHIcon = [IntPtr]::Zero
-            }
             $bmp = New-Object System.Drawing.Bitmap(32, 32)
             $g   = [System.Drawing.Graphics]::FromImage($bmp)
             $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -157,9 +153,13 @@ try {
             $px = [int]((32 - $sz.Width) / 2); $py = [int]((32 - $sz.Height) / 2)
             if ($RiskLevel -ne "YELLOW") { $g.DrawString($txt, $font, $sBrush, ($px+1), ($py+1)) }
             $g.DrawString($txt, $font, $tBrush, $px, $py)
+            
             $hIcon = $bmp.GetHicon()
-            $Global:State.LastHIcon = $hIcon
-            $icon = [System.Drawing.Icon]::FromHandle($hIcon)
+            $tempIcon = [System.Drawing.Icon]::FromHandle($hIcon)
+            $icon = $tempIcon.Clone()
+            $tempIcon.Dispose()
+            [NativeMethods]::DestroyIcon($hIcon) | Out-Null
+            
             foreach ($obj in @($g, $bmp, $pen, $fill, $tBrush, $sBrush, $font)) { $obj.Dispose() }
             return $icon
         } catch { return [System.Drawing.SystemIcons]::Application }
@@ -167,7 +167,7 @@ try {
 
     function Refresh-UIElements {
         if (-not $script:NotifyIcon) { return }
-        $pct  = $Global:State.Remaining5HourPercent
+        $pct  = [int]$Global:State.Remaining5HourPercent
         $risk = $Global:State.RiskLevel
         $script:NotifyIcon.Icon = New-BatteryIcon -Percent $pct -RiskLevel $risk
         $tip = "Gemini 5h $pct%($($Global:State.Short5HourRemTimeStr)) | 주간 $($Global:State.RemainingWeeklyPercent)%"
@@ -471,6 +471,19 @@ try {
         $btnOK.ForeColor = [System.Drawing.Color]::White; $btnOK.BackColor = [System.Drawing.Color]::FromArgb(100, 100, 100)
         $btnOK.Add_Click({ $f.Close() }); $f.Controls.Add($btnOK)
 
+        $statusTimer = New-Object System.Windows.Forms.Timer
+        $statusTimer.Interval = 1000
+        $statusTimer.Add_Tick({
+            if ($tb -and -not $tb.IsDisposed) {
+                $tb.Text = Build-StatusText
+            }
+        })
+        $f.Add_Shown({ $statusTimer.Start() })
+        $f.Add_FormClosed({
+            $statusTimer.Stop()
+            $statusTimer.Dispose()
+        })
+
         $f.ShowDialog()
     }
 
@@ -702,6 +715,9 @@ try {
     $itemStatus = $ctxMenu.Items.Add("현황 확인")
     $itemStatus.Font = New-Object System.Drawing.Font("맑은 고딕", 9, [System.Drawing.FontStyle]::Bold)
     $itemStatus.Add_Click({ Show-StatusDialog })
+
+    $itemScan = $ctxMenu.Items.Add("지금 갱신")
+    $itemScan.Add_Click({ Start-BackgroundScanRunspace })
 
     $itemSettings = $ctxMenu.Items.Add("설정")
     $itemSettings.Add_Click({ Show-SettingsDialog })

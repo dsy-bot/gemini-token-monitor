@@ -17,6 +17,9 @@ namespace AntigravityTokenMonitor
     {
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool DestroyIcon(IntPtr handle);
+
+        [DllImport("psapi.dll")]
+        public static extern int EmptyWorkingSet(IntPtr hwProc);
     }
 
     public enum StatusLevel
@@ -343,10 +346,22 @@ namespace AntigravityTokenMonitor
                 finally
                 {
                     _isChecking = false;
+                    TrimMemory();
                 }
             };
 
             action.BeginInvoke(null, null);
+        }
+
+        private static void TrimMemory()
+        {
+            try
+            {
+                GC.Collect(2, GCCollectionMode.Forced, true);
+                GC.WaitForPendingFinalizers();
+                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+            }
+            catch { }
         }
 
         private static string FetchQuotaJson()
@@ -1010,6 +1025,7 @@ namespace AntigravityTokenMonitor
             form.Controls.Add(btnClose);
 
             form.ShowDialog();
+            TrimMemory();
         }
 
         private static void ShowWeeklyCalibrationDialog()
@@ -1210,6 +1226,7 @@ namespace AntigravityTokenMonitor
             f.Controls.Add(btnClose);
 
             f.ShowDialog();
+            TrimMemory();
         }
     }
 }

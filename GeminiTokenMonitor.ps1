@@ -19,25 +19,27 @@ public class NativeMethods {
 }
 
 $ScriptDir      = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ConfigFile     = Join-Path $ScriptDir "config.json"
-$LogFile        = Join-Path $ScriptDir "monitor.log"
-$StateCacheFile = Join-Path $ScriptDir "state_cache.json"
+$ConfigDir      = Join-Path $ScriptDir "config"
+$ConfigFile     = Join-Path $ConfigDir "config.json"
+$StateCacheFile = Join-Path $ConfigDir "state_cache.json"
 $LogsDir        = Join-Path $ScriptDir "logs"
+$TokenLogsDir   = Join-Path $LogsDir "token"
+$SystemLogsDir  = Join-Path $LogsDir "system"
 
-if (-not (Test-Path $LogsDir)) { New-Item -ItemType Directory -Path $LogsDir | Out-Null }
+if (-not (Test-Path $ConfigDir))     { New-Item -ItemType Directory -Path $ConfigDir | Out-Null }
+if (-not (Test-Path $TokenLogsDir))  { New-Item -ItemType Directory -Path $TokenLogsDir | Out-Null }
+if (-not (Test-Path $SystemLogsDir)) { New-Item -ItemType Directory -Path $SystemLogsDir | Out-Null }
 
 # ==============================================================================
-# 로깅 (200KB 초과 시 뒤쪽 절반만 유지)
+# 로깅 (일일 시스템 진단 로그)
 # ==============================================================================
 function Write-Log {
     param([string]$Message)
     try {
-        $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-        "[$ts] $Message" | Out-File -FilePath $LogFile -Append -Encoding UTF8
-        if ((Get-Item $LogFile).Length -gt 204800) {
-            $lines = Get-Content $LogFile -Encoding UTF8
-            $lines[([int]($lines.Count / 2))..($lines.Count - 1)] | Set-Content $LogFile -Encoding UTF8
-        }
+        $now = Get-Date
+        $ts = $now.ToString("yyyy-MM-dd HH:mm:ss")
+        $dailySystemLog = Join-Path $SystemLogsDir "system_$($now.ToString('yyyy-MM-dd')).log"
+        "[$ts] $Message" | Out-File -FilePath $dailySystemLog -Append -Encoding UTF8
     } catch {}
 }
 
@@ -65,10 +67,12 @@ try {
         tokensPerKB             = 12
         checkIntervalSeconds    = 60
         ScriptDir               = $ScriptDir
+        ConfigDir               = $ConfigDir
         ConfigFile              = $ConfigFile
         StateCacheFile          = $StateCacheFile
-        LogFile                 = $LogFile
         LogsDir                 = $LogsDir
+        TokenLogsDir            = $TokenLogsDir
+        SystemLogsDir           = $SystemLogsDir
     })
 
     if (Test-Path $ConfigFile) {
@@ -197,6 +201,8 @@ try {
                 $tokPerKB = if ($SyncConfig.ContainsKey('tokensPerKB') -and $SyncConfig.tokensPerKB -gt 0) { [long]$SyncConfig.tokensPerKB } else { 12L }
                 
                 $cycleDelta = 0L
+                $cycleDeltaKB = 0L
+                $totalCurrentKB = 0L
 
                 # 1. 파일 크기 변경 감지
                 if ([System.IO.Directory]::Exists($convDir)) {
@@ -204,6 +210,7 @@ try {
                         try {
                             $dbInfo = New-Object System.IO.FileInfo($dbPath)
                             $curSizeKB = [long]($dbInfo.Length / 1024)
+                            $totalCurrentKB += $curSizeKB
                             $prevSizeKB = 0L
                             $isNewFile = $true
 
@@ -216,6 +223,7 @@ try {
                                 $SyncState.FileOffsetCache[$dbPath] = $curSizeKB
                             } elseif ($curSizeKB -gt $prevSizeKB) {
                                 $deltaKB = $curSizeKB - $prevSizeKB
+                                $cycleDeltaKB += $deltaKB
                                 $cycleDelta += ($deltaKB * $tokPerKB)
                                 $SyncState.FileOffsetCache[$dbPath] = $curSizeKB
                             }
@@ -223,14 +231,20 @@ try {
                     }
                 }
 
-                # 2. 증분 로그 기록
-                if ($cycleDelta -gt 0) {
-                    $logFile = [System.IO.Path]::Combine($SyncConfig.LogsDir, "usage_$($now.ToString('yyyy-MM-dd')).jsonl")
-                    $logEntry = [pscustomobject]@{ t = $now.ToString("HH:mm:ss"); v = $cycleDelta }
-                    ($logEntry | ConvertTo-Json -Compress) | Out-File -FilePath $logFile -Append -Encoding UTF8
+                # 2. 증분 CSV 로그 기록
+                $csvHeader = "Timestamp,Type,DeltaTokens,DeltaKB,TotalDB_KB,UserPercent,TokensPerKB,Rem5hPct,RemWkPct,Note"
+                $csvFile = [System.IO.Path]::Combine($SyncConfig.TokenLogsDir, "usage_$($now.ToString('yyyy-MM-dd')).csv")
+                
+                if (-not [System.IO.File]::Exists($csvFile)) {
+                    try { [System.IO.File]::WriteAllLines($csvFile, @($csvHeader), [System.Text.Encoding]::UTF8) } catch {}
                 }
 
-                # 3. 로그 통합 정산
+                if ($cycleDelta -gt 0) {
+                    $csvRow = "$($now.ToString('HH:mm:ss')),SCAN,$cycleDelta,$cycleDeltaKB,$totalCurrentKB,,$tokPerKB,,,"
+                    try { [System.IO.File]::AppendAllLines($csvFile, @($csvRow), [System.Text.Encoding]::UTF8) } catch {}
+                }
+
+                # 3. CSV 로그 통합 정산
                 $wft = $SyncState.WeeklyFirstUseTime
                 if ($wft -eq [DateTime]::MinValue) { $wft = $today.AddDays(-7) }
                 
@@ -239,13 +253,40 @@ try {
                 $tokensThisWeek = 0L
                 $firstActivityToday = [DateTime]::MaxValue
 
-                if ([System.IO.Directory]::Exists($SyncConfig.LogsDir)) {
-                    foreach ($file in [System.IO.Directory]::EnumerateFiles($SyncConfig.LogsDir, "usage_*.jsonl")) {
+                if ([System.IO.Directory]::Exists($SyncConfig.TokenLogsDir)) {
+                    # CSV 파일 집계
+                    foreach ($file in [System.IO.Directory]::EnumerateFiles($SyncConfig.TokenLogsDir, "usage_*.csv")) {
                         try {
                             $dateStr = [System.IO.Path]::GetFileNameWithoutExtension($file).Substring(6)
                             $fileDate = [DateTime]::ParseExact($dateStr, "yyyy-MM-dd", $null)
                             
-                            # 주간 체크 (7일치 롤링)
+                            if ($fileDate -ge $wft.Date -and $fileDate -le $today) {
+                                foreach ($line in [System.IO.File]::ReadLines($file)) {
+                                    if ($line.Trim() -eq "" -or $line.StartsWith("Timestamp")) { continue }
+                                    $cols = $line.Split(',')
+                                    if ($cols.Length -ge 3) {
+                                        $v = [long]$cols[2]
+                                        $entryTime = $fileDate.Date.Add([TimeSpan]::Parse($cols[0]))
+                                        
+                                        $tokensThisWeek += $v
+                                        if ($fileDate -eq $today) {
+                                            $tokensToday += $v
+                                            if ($entryTime -lt $firstActivityToday) { $firstActivityToday = $entryTime }
+                                        }
+                                        if ($entryTime -ge $start5h) { $tokens5h += $v }
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
+                    # 기존 JSONL 파일 호환 (있을 경우)
+                    foreach ($file in [System.IO.Directory]::EnumerateFiles($SyncConfig.TokenLogsDir, "usage_*.jsonl")) {
+                        try {
+                            $dateStr = [System.IO.Path]::GetFileNameWithoutExtension($file).Substring(6)
+                            $csvEquivalent = [System.IO.Path]::Combine($SyncConfig.TokenLogsDir, "usage_$dateStr.csv")
+                            if ([System.IO.File]::Exists($csvEquivalent)) { continue } # CSV가 이미 있으면 스킵
+                            
+                            $fileDate = [DateTime]::ParseExact($dateStr, "yyyy-MM-dd", $null)
                             if ($fileDate -ge $wft.Date -and $fileDate -le $today) {
                                 foreach ($line in [System.IO.File]::ReadLines($file)) {
                                     if ($line.Trim() -eq "") { continue }
@@ -443,17 +484,21 @@ try {
 
             # 오늘 로그 표시 (최근 5건)
             try {
-                $todayLog = [System.IO.Path]::Combine($cfg.LogsDir, "usage_$([DateTime]::Now.ToString('yyyy-MM-dd')).jsonl")
-                if ([System.IO.File]::Exists($todayLog)) {
-                    $logLines = [System.IO.File]::ReadAllLines($todayLog)
+                $todayCsv = [System.IO.Path]::Combine($cfg.TokenLogsDir, "usage_$([DateTime]::Now.ToString('yyyy-MM-dd')).csv")
+                if ([System.IO.File]::Exists($todayCsv)) {
+                    $logLines = [System.IO.File]::ReadAllLines($todayCsv) | Where-Object { $_.Trim() -ne "" -and -not $_.StartsWith("Timestamp") }
                     if ($logLines.Length -gt 0) {
                         $lines += "-- 최근 소모 로그 (오늘, 최대 5건) ----------------"
                         $startIdx = [math]::Max(0, $logLines.Length - 5)
                         for ($i = $logLines.Length - 1; $i -ge $startIdx; $i--) {
-                            if ($logLines[$i].Trim() -eq "") { continue }
-                            $entry = $logLines[$i] | ConvertFrom-Json
-                            $note = if ($entry.note) { " (" + $entry.note + ")" } else { "" }
-                            $lines += "  [" + $entry.t + "]  " + [long]$entry.v + " tok 소모" + $note
+                            $cols = $logLines[$i].Split(',')
+                            if ($cols.Length -ge 3) {
+                                $t = $cols[0]
+                                $type = $cols[1]
+                                $v = [long]$cols[2]
+                                $extra = if ($cols.Length -ge 10 -and $cols[9]) { " (" + $cols[9] + ")" } else { "" }
+                                $lines += "  [$t] [$type]  $v tok $extra"
+                            }
                         }
                     }
                 }
@@ -597,17 +642,24 @@ try {
         Add-Label $pnl "비율 (tok/KB, 기본 12):" 20 564
         $txtTokPerKB = Add-Input $pnl 20 582 200 $Global:Config.tokensPerKB
 
+        $chkAutoTokPerKB = New-Object System.Windows.Forms.CheckBox
+        $chkAutoTokPerKB.Text = "5h 보정 시 DB크기 대비 tok/KB 비율 자동 최적화"
+        $chkAutoTokPerKB.ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 255)
+        $chkAutoTokPerKB.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
+        $chkAutoTokPerKB.Location = New-Object System.Drawing.Point(20, 622); $chkAutoTokPerKB.AutoSize = $true
+        $pnl.Controls.Add($chkAutoTokPerKB)
+
         $chkResetWeekly = New-Object System.Windows.Forms.CheckBox
         $chkResetWeekly.Text = "주간 첫사용 시각 + 수동 종료시각 초기화"
         $chkResetWeekly.ForeColor = [System.Drawing.Color]::FromArgb(255, 200, 100)
         $chkResetWeekly.Font = New-Object System.Drawing.Font("맑은 고딕", 9.5)
-        $chkResetWeekly.Location = New-Object System.Drawing.Point(20, 622); $chkResetWeekly.AutoSize = $true
+        $chkResetWeekly.Location = New-Object System.Drawing.Point(20, 646); $chkResetWeekly.AutoSize = $true
         $pnl.Controls.Add($chkResetWeekly)
 
         $btnSave = New-Object System.Windows.Forms.Button
         $btnSave.Text = "저장 및 갱신"
         $btnSave.Font = New-Object System.Drawing.Font("맑은 고딕", 10, [System.Drawing.FontStyle]::Bold)
-        $btnSave.Location = New-Object System.Drawing.Point(340, 660)
+        $btnSave.Location = New-Object System.Drawing.Point(340, 680)
         $btnSave.Size = New-Object System.Drawing.Size(160, 36)
         $btnSave.ForeColor = [System.Drawing.Color]::White
         $btnSave.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
@@ -619,7 +671,20 @@ try {
             try { $Global:Config.tokensPerKB             = [int]$txtTokPerKB.Text.Trim() } catch {}
 
             $now = [DateTime]::Now
-            $todayLog = [System.IO.Path]::Combine($Global:Config.LogsDir, "usage_$($now.ToString('yyyy-MM-dd')).jsonl")
+            $csvHeader = "Timestamp,Type,DeltaTokens,DeltaKB,TotalDB_KB,UserPercent,TokensPerKB,Rem5hPct,RemWkPct,Note"
+            $todayCsv = [System.IO.Path]::Combine($Global:Config.TokenLogsDir, "usage_$($now.ToString('yyyy-MM-dd')).csv")
+            if (-not [System.IO.File]::Exists($todayCsv)) {
+                try { [System.IO.File]::WriteAllLines($todayCsv, @($csvHeader), [System.Text.Encoding]::UTF8) } catch {}
+            }
+
+            # 현재 전체 DB 용량 계산
+            $totKB = 0L
+            $convDir = [System.IO.Path]::Combine($env:USERPROFILE, ".gemini", "antigravity", "conversations")
+            if ([System.IO.Directory]::Exists($convDir)) {
+                foreach ($db in [System.IO.Directory]::EnumerateFiles($convDir, "*.db")) {
+                    try { $totKB += [long]((New-Object System.IO.FileInfo($db)).Length / 1024) } catch {}
+                }
+            }
 
             # 기능 A: 5h 쿼터 역산
             $v5hQ = $txt5hPct.Text.Trim()
@@ -630,6 +695,8 @@ try {
                     $newQuota = [long]($Global:State.TokensUsed5Hours / $usedPct)
                     $Global:Config.rolling5HourQuotaTokens = $newQuota
                     $txt5hQ.Text = $newQuota.ToString()
+                    $csvRow = "$($now.ToString('HH:mm:ss')),CALIB_A,0,0,$totKB,$pct,$($Global:Config.tokensPerKB),$pct,$($Global:State.RemainingWeeklyPercent),5h_quota_calib"
+                    try { [System.IO.File]::AppendAllLines($todayCsv, @($csvRow), [System.Text.Encoding]::UTF8) } catch {}
                 }
             }
             # 기능 A: 주간 쿼터 역산
@@ -641,22 +708,34 @@ try {
                     $newQuota = [long]($Global:State.TokensThisWeek / $usedPct)
                     $Global:Config.weeklyQuotaTokens = $newQuota
                     $txtWkQ.Text = $newQuota.ToString()
+                    $csvRow = "$($now.ToString('HH:mm:ss')),CALIB_A,0,0,$totKB,$pct,$($Global:Config.tokensPerKB),$($Global:State.Remaining5HourPercent),$pct,wk_quota_calib"
+                    try { [System.IO.File]::AppendAllLines($todayCsv, @($csvRow), [System.Text.Encoding]::UTF8) } catch {}
                 }
             }
 
-            # 기능 B: 5h 사용량 강제 동기화 (Diff 로그 기록)
+            # 기능 B: 5h 사용량 강제 동기화 (Diff CSV 로그 기록)
             $v5hSync = $txt5hSyncPct.Text.Trim()
             if ($v5hSync -match '^\d+(\.\d+)?$') {
                 $pct = [double]$v5hSync
                 $targetUsed = [long]($Global:Config.rolling5HourQuotaTokens * (1.0 - ($pct / 100.0)))
                 $diff = $targetUsed - $Global:State.TokensUsed5Hours
+                
+                # tok/KB 자동 최적화
+                if ($chkAutoTokPerKB.Checked -and $totKB -gt 0 -and $targetUsed -gt 0) {
+                    $optTokPerKB = [int][math]::Round($targetUsed / $totKB)
+                    if ($optTokPerKB -gt 0) {
+                        $Global:Config.tokensPerKB = $optTokPerKB
+                        $txtTokPerKB.Text = $optTokPerKB.ToString()
+                    }
+                }
+
                 if ($diff -ne 0) {
-                    $logEntry = [pscustomobject]@{ t = $now.ToString("HH:mm:ss"); v = $diff; note = "5h_sync" }
-                    ($logEntry | ConvertTo-Json -Compress) | Out-File -FilePath $todayLog -Append -Encoding UTF8
+                    $csvRow = "$($now.ToString('HH:mm:ss')),SYNC_5H,$diff,0,$totKB,$pct,$($Global:Config.tokensPerKB),$pct,$($Global:State.RemainingWeeklyPercent),5h_sync"
+                    try { [System.IO.File]::AppendAllLines($todayCsv, @($csvRow), [System.Text.Encoding]::UTF8) } catch {}
                 }
             }
 
-            # 기능 B: 주간 사용량 강제 동기화 (6시간 전 타임스탬프)
+            # 기능 B: 주간 사용량 강제 동기화 (6시간 전 타임스탬프 CSV 기록)
             $vWkSync = $txtWkSyncPct.Text.Trim()
             if ($vWkSync -match '^\d+(\.\d+)?$') {
                 $pct = [double]$vWkSync
@@ -664,9 +743,12 @@ try {
                 $diff = $targetUsed - $Global:State.TokensThisWeek
                 if ($diff -ne 0) {
                     $fakeTime = $now.AddHours(-6)
-                    $fakeLog = [System.IO.Path]::Combine($Global:Config.LogsDir, "usage_$($fakeTime.ToString('yyyy-MM-dd')).jsonl")
-                    $logEntry = [pscustomobject]@{ t = $fakeTime.ToString("HH:mm:ss"); v = $diff; note = "wk_sync" }
-                    ($logEntry | ConvertTo-Json -Compress) | Out-File -FilePath $fakeLog -Append -Encoding UTF8
+                    $fakeCsv = [System.IO.Path]::Combine($Global:Config.TokenLogsDir, "usage_$($fakeTime.ToString('yyyy-MM-dd')).csv")
+                    if (-not [System.IO.File]::Exists($fakeCsv)) {
+                        try { [System.IO.File]::WriteAllLines($fakeCsv, @($csvHeader), [System.Text.Encoding]::UTF8) } catch {}
+                    }
+                    $csvRow = "$($fakeTime.ToString('HH:mm:ss')),SYNC_WK,$diff,0,$totKB,$pct,$($Global:Config.tokensPerKB),$($Global:State.Remaining5HourPercent),$pct,wk_sync"
+                    try { [System.IO.File]::AppendAllLines($fakeCsv, @($csvRow), [System.Text.Encoding]::UTF8) } catch {}
                 }
             }
 

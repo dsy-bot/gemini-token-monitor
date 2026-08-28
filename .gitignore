@@ -1,6 +1,13 @@
-# Gemini Token Monitor - Git Ignore Rules
+# Local config & runtime state
+config/
 config.json
+state_cache.json
 monitor.log
-daily_usage.json
+
+# Daily usage logs
+logs/
+
+# Legacy archive & temp files
+legacy/
 *.tmp
 *.log

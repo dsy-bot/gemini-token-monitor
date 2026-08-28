@@ -37,6 +37,9 @@ namespace AntigravityTokenMonitor
         public string weekly_reset_day { get; set; }
         public string weekly_reset_time { get; set; }
         public double weekly_multiplier { get; set; }
+        public bool sync_enabled { get; set; }
+        public string sync_url { get; set; }
+        public string sync_api_key { get; set; }
 
         public AppConfig()
         {
@@ -45,6 +48,9 @@ namespace AntigravityTokenMonitor
             weekly_reset_day = "Monday";
             weekly_reset_time = "00:00";
             weekly_multiplier = 30.9;
+            sync_enabled = false;
+            sync_url = string.Empty;
+            sync_api_key = string.Empty;
         }
     }
 
@@ -71,6 +77,10 @@ namespace AntigravityTokenMonitor
         public string LastErrorMessage { get; set; }
         public string RawJson { get; set; }
 
+        // v3.1 신규: 주간 사이클 및 첫 소비 시점 추적
+        public string LastWeeklyResetId { get; set; }
+        public string WeeklyFirstActiveTimeStr { get; set; }
+
         public MonitorState()
         {
             Remaining5HourPercent = 100.0;
@@ -85,6 +95,8 @@ namespace AntigravityTokenMonitor
             LastCheckTime = DateTime.MinValue;
             LastErrorMessage = string.Empty;
             RawJson = string.Empty;
+            LastWeeklyResetId = string.Empty;
+            WeeklyFirstActiveTimeStr = "기록 없음";
         }
     }
 
@@ -137,7 +149,13 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = new MonitorState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v3.0 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v3.1 시작");
+
+            // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
+            if (_config.sync_enabled)
+            {
+                SyncPullFromServer();
+            }
 
             InitTrayIcon();
 
@@ -166,8 +184,9 @@ namespace AntigravityTokenMonitor
             {
                 try
                 {
-                    string json = File.ReadAllText(configPath, System.Text.Encoding.UTF8);
-                    AppConfig cfg = _jsonSerializer.Deserialize<AppConfig>(json);
+                    string rawJson = File.ReadAllText(configPath, System.Text.Encoding.UTF8);
+                    string cleanJson = System.Text.RegularExpressions.Regex.Replace(rawJson, @"(?m)^\s*//.*$", "");
+                    AppConfig cfg = _jsonSerializer.Deserialize<AppConfig>(cleanJson);
                     if (cfg != null)
                     {
                         if (cfg.weekly_multiplier <= 0.0) cfg.weekly_multiplier = 30.9;
@@ -178,10 +197,14 @@ namespace AntigravityTokenMonitor
                 {
                     WriteSystemLog("ERROR", "config.json 로드 실패: " + ex.Message);
                 }
+                return new AppConfig();
             }
-            AppConfig defaultCfg = new AppConfig();
-            SaveConfig(defaultCfg);
-            return defaultCfg;
+            else
+            {
+                AppConfig defaultCfg = new AppConfig();
+                SaveConfig(defaultCfg);
+                return defaultCfg;
+            }
         }
 
         private static void SaveConfig(AppConfig cfg)
@@ -189,8 +212,28 @@ namespace AntigravityTokenMonitor
             try
             {
                 string configPath = Path.Combine(_appDir, "config.json");
-                string json = _jsonSerializer.Serialize(cfg);
-                File.WriteAllText(configPath, json, System.Text.Encoding.UTF8);
+                string formattedJson = string.Format(
+                    "{{\r\n" +
+                    "  // 요일 복사용: Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday\r\n" +
+                    "  \"interval_minutes\": {0},\r\n" +
+                    "  \"daily_reset_time\": \"{1}\",\r\n" +
+                    "  \"weekly_reset_day\": \"{2}\",\r\n" +
+                    "  \"weekly_reset_time\": \"{3}\",\r\n" +
+                    "  \"weekly_multiplier\": {4:F1},\r\n" +
+                    "  \"sync_enabled\": {5},\r\n" +
+                    "  \"sync_url\": \"{6}\",\r\n" +
+                    "  \"sync_api_key\": \"{7}\"\r\n" +
+                    "}}",
+                    cfg.interval_minutes,
+                    cfg.daily_reset_time ?? "00:00",
+                    cfg.weekly_reset_day ?? "Monday",
+                    cfg.weekly_reset_time ?? "00:00",
+                    cfg.weekly_multiplier > 0 ? cfg.weekly_multiplier : 30.9,
+                    cfg.sync_enabled ? "true" : "false",
+                    cfg.sync_url ?? "",
+                    cfg.sync_api_key ?? ""
+                );
+                File.WriteAllText(configPath, formattedJson, System.Text.Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -307,6 +350,9 @@ namespace AntigravityTokenMonitor
                     _state.LastCheckTime = DateTime.Now;
                     _state.LastErrorMessage = string.Empty;
 
+                    // 주간 리셋 주기 확인 및 새 주간 첫 토큰 소비 추적
+                    CheckWeeklyCycleAndFirstUsage(rem5h);
+
                     double remWk = CalculateEstimatedWeeklyPercent(rem5h);
                     _state.RemainingWeeklyPercent = remWk;
 
@@ -335,6 +381,12 @@ namespace AntigravityTokenMonitor
                     WriteSpeedLog(speed5h, t5h, _state.Predicted5HourRemaining, tWeekly, _state.PredictedWeeklyRemaining, newStatus);
 
                     UpdateTrayUI();
+
+                    // 클라우드 Key-Value 서버로 최신 상태 자동 Push
+                    if (_config.sync_enabled)
+                    {
+                        SyncPushToServer();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -351,6 +403,35 @@ namespace AntigravityTokenMonitor
             };
 
             action.BeginInvoke(null, null);
+        }
+
+        private static void CheckWeeklyCycleAndFirstUsage(double current5hRem)
+        {
+            try
+            {
+                DateTime now = DateTime.Now;
+                DayOfWeek resetDay = DayOfWeek.Monday;
+                try { resetDay = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), _config.weekly_reset_day, true); } catch { }
+
+                // 현재 주간 사이클 ID (예: 2026-W35)
+                int weekNum = System.Globalization.CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(now, System.Globalization.CalendarWeekRule.FirstFourDayWeek, resetDay);
+                string currentCycleId = string.Format("{0}-W{1}", now.Year, weekNum);
+
+                if (_state.LastWeeklyResetId != currentCycleId)
+                {
+                    _state.LastWeeklyResetId = currentCycleId;
+                    _state.WeeklyFirstActiveTimeStr = "아직 소비 없음 (리셋 대기)";
+                    WriteSystemLog("INFO", string.Format("새 주간 사이클 진입 ({0}): 주간 잔여량 100% 초기화", currentCycleId));
+                }
+
+                // 주간 첫 토큰 소모 감지 (5h 잔여가 100% 미만으로 감소하는 첫 순간)
+                if (current5hRem < 99.9 && _state.WeeklyFirstActiveTimeStr.Contains("아직 소비 없음"))
+                {
+                    _state.WeeklyFirstActiveTimeStr = now.ToString("yyyy-MM-dd HH:mm:ss");
+                    WriteSystemLog("INFO", string.Format("🎯 새 주간 첫 토큰 소비 감지! 시각: {0}, 5h 잔여: {1:F1}%", _state.WeeklyFirstActiveTimeStr, current5hRem));
+                }
+            }
+            catch { }
         }
 
         private static void TrimMemory()
@@ -641,12 +722,138 @@ namespace AntigravityTokenMonitor
                     userWkPct, current5h, currentReset));
 
                 UpdateTrayUI();
+
+                if (_config.sync_enabled)
+                {
+                    SyncPushToServer();
+                }
             }
             catch (Exception ex)
             {
                 WriteSystemLog("ERROR", "주간 보정 저장 실패: " + ex.Message);
             }
         }
+
+        #region Key-Value Cloud Sync (Raw HttpWebRequest)
+        private static void SyncPullFromServer()
+        {
+            if (!_config.sync_enabled || string.IsNullOrEmpty(_config.sync_url)) return;
+
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(_config.sync_url);
+                req.Method = "GET";
+                req.Timeout = 3000;
+                if (!string.IsNullOrEmpty(_config.sync_api_key))
+                {
+                    req.Headers.Add("X-Master-Key", _config.sync_api_key);
+                    req.Headers.Add("X-Access-Key", _config.sync_api_key);
+                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key);
+                }
+
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (StreamReader r = new StreamReader(resp.GetResponseStream(), System.Text.Encoding.UTF8))
+                {
+                    string json = r.ReadToEnd();
+                    if (!string.IsNullOrEmpty(json))
+                    {
+                        object obj = _jsonSerializer.DeserializeObject(json);
+                        Dictionary<string, object> dict = obj as Dictionary<string, object>;
+                        if (dict != null)
+                        {
+                            if (dict.ContainsKey("record"))
+                            {
+                                Dictionary<string, object> rec = dict["record"] as Dictionary<string, object>;
+                                if (rec != null) dict = rec;
+                            }
+
+                            if (dict.ContainsKey("weekly_multiplier") && dict["weekly_multiplier"] != null)
+                            {
+                                _config.weekly_multiplier = Convert.ToDouble(dict["weekly_multiplier"]);
+                            }
+                            if (dict.ContainsKey("remaining_weekly_percent") && dict["remaining_weekly_percent"] != null)
+                            {
+                                _state.RemainingWeeklyPercent = Convert.ToDouble(dict["remaining_weekly_percent"]);
+                            }
+                            if (dict.ContainsKey("weekly_reset_day") && dict["weekly_reset_day"] != null)
+                            {
+                                _config.weekly_reset_day = Convert.ToString(dict["weekly_reset_day"]);
+                            }
+                            if (dict.ContainsKey("weekly_reset_time") && dict["weekly_reset_time"] != null)
+                            {
+                                _config.weekly_reset_time = Convert.ToString(dict["weekly_reset_time"]);
+                            }
+                            if (dict.ContainsKey("weekly_first_active_time") && dict["weekly_first_active_time"] != null)
+                            {
+                                _state.WeeklyFirstActiveTimeStr = Convert.ToString(dict["weekly_first_active_time"]);
+                            }
+
+                            SaveConfig(_config);
+                            WriteSystemLog("INFO", string.Format("클라우드 Key-Value 동기화 수신 성공 (주간%: {0:F1}%, 배율: {1:F1}배)",
+                                _state.RemainingWeeklyPercent, _config.weekly_multiplier));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteSystemLog("WARN", "클라우드 동기화 Pull 실패: " + ex.Message);
+            }
+            finally
+            {
+                TrimMemory();
+            }
+        }
+
+        private static void SyncPushToServer()
+        {
+            if (!_config.sync_enabled || string.IsNullOrEmpty(_config.sync_url)) return;
+
+            try
+            {
+                Dictionary<string, object> payload = new Dictionary<string, object>();
+                payload["updated_at"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                payload["remaining_weekly_percent"] = _state.RemainingWeeklyPercent;
+                payload["weekly_multiplier"] = _config.weekly_multiplier;
+                payload["weekly_reset_day"] = _config.weekly_reset_day;
+                payload["weekly_reset_time"] = _config.weekly_reset_time;
+                payload["weekly_first_active_time"] = _state.WeeklyFirstActiveTimeStr;
+
+                string json = _jsonSerializer.Serialize(payload);
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(json);
+
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(_config.sync_url);
+                req.Method = "PUT"; // jsonbin.io 및 일반 KV API는 PUT/POST 지원
+                req.ContentType = "application/json";
+                req.ContentLength = bytes.Length;
+                req.Timeout = 3000;
+                if (!string.IsNullOrEmpty(_config.sync_api_key))
+                {
+                    req.Headers.Add("X-Master-Key", _config.sync_api_key);
+                    req.Headers.Add("X-Access-Key", _config.sync_api_key);
+                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key);
+                }
+
+                using (Stream s = req.GetRequestStream())
+                {
+                    s.Write(bytes, 0, bytes.Length);
+                }
+
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                {
+                    // 전송 성공
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteSystemLog("WARN", "클라우드 동기화 Push 실패: " + ex.Message);
+            }
+            finally
+            {
+                TrimMemory();
+            }
+        }
+        #endregion
 
         private static double Calculate5HourConsumptionSpeed(double currentRemPct)
         {
@@ -785,7 +992,7 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v3.0";
+            _notifyIcon.Text = "Antigravity Token Monitor v3.1";
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
@@ -793,7 +1000,7 @@ namespace AntigravityTokenMonitor
             itemStatus.Click += delegate(object sender, EventArgs e) { ShowStatusDialog(); };
             menu.Items.Add(itemStatus);
 
-            ToolStripMenuItem itemCalib = new ToolStripMenuItem("🎯 주간 잔여 % 입력 & 배율 자동보정");
+            ToolStripMenuItem itemCalib = new ToolStripMenuItem("🎯 주간 설정 & 배율 보정");
             itemCalib.Click += delegate(object sender, EventArgs e) { ShowWeeklyCalibrationDialog(); };
             menu.Items.Add(itemCalib);
 
@@ -921,8 +1128,8 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v3.0 - 실시간 현황",
-                Size = new Size(640, 540),
+                Text = "Antigravity Token Monitor v3.1 - 실시간 현황",
+                Size = new Size(640, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
                 MaximizeBox = false,
@@ -939,41 +1146,45 @@ namespace AntigravityTokenMonitor
                 BackColor = Color.FromArgb(30, 33, 40),
                 ForeColor = Color.FromArgb(220, 230, 240),
                 Location = new Point(12, 12),
-                Size = new Size(600, 440)
+                Size = new Size(600, 460)
             };
 
             Action refreshText = delegate
             {
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v3.0 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v3.1 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
+                    "  클라우드동기화: {2}\r\n" +
                     "\r\n" +
                     "-- 5시간 및 주간 쿼터 현황 ---------------------------\r\n" +
-                    "  5시간 실측  : {2:F1} %  (공식 리셋: {3:F1}시간 남음, {4})\r\n" +
-                    "  주간 잔여량 : {5:F1} %  (주간/일간 배율: {6:F1}배 적용 중)\r\n" +
-                    "  5시간 소모속도 : {7:F2} %/h\r\n" +
+                    "  5시간 실측  : {3:F1} %  (공식 리셋: {4:F1}시간 남음, {5})\r\n" +
+                    "  주간 잔여량 : {6:F1} %  (주간/일간 배율: {7:F1}배 적용 중)\r\n" +
+                    "  5시간 소모속도 : {8:F2} %/h\r\n" +
+                    "  새 주간 첫소비 : {9}\r\n" +
                     "\r\n" +
                     "-- 초기화 시점 예측 잔여량 ---------------------------\r\n" +
-                    "  5시간 리셋시점 예측: {8:F2} %\r\n" +
-                    "  주간  리셋시점 예측: {9:F2} %  ({10}시간 후, {11} {12})\r\n" +
+                    "  5시간 리셋시점 예측: {10:F2} %\r\n" +
+                    "  주간  리셋시점 예측: {11:F2} %  ({12}시간 후, {13} {14})\r\n" +
                     "\r\n" +
                     "-- 상태 판정 기준 ------------------------------------\r\n" +
                     "  🔴 위험: 리셋 시점 잔여량 <= 15%\r\n" +
                     "  🟠 경고: 5h 속도 >= 20%/h OR 리셋 시점 잔여량 <= 25%\r\n" +
                     "  🟢 정상: 안정 범위\r\n" +
                     "======================================================\r\n" +
-                    "{13}",
+                    "{15}",
                     _state.LastCheckTime > DateTime.MinValue ? _state.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") : "조회 중...",
                     _state.CurrentStatus,
+                    _config.sync_enabled ? "🟢 활성화 (" + _config.sync_url + ")" : "⚪ 비활성화 (로컬 단독 모드)",
                     _state.Remaining5HourPercent,
                     _state.HoursUntil5HourReset,
                     string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr,
                     _state.RemainingWeeklyPercent,
                     _config.weekly_multiplier,
                     _state.ConsumptionSpeed5h,
+                    _state.WeeklyFirstActiveTimeStr,
                     _state.Predicted5HourRemaining,
                     _state.PredictedWeeklyRemaining,
                     _state.HoursUntilWeeklyReset.ToString("F1"),
@@ -991,7 +1202,7 @@ namespace AntigravityTokenMonitor
             Button btnRefresh = new Button
             {
                 Text = "지금 갱신",
-                Location = new Point(12, 460),
+                Location = new Point(12, 480),
                 Size = new Size(110, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
@@ -1003,7 +1214,7 @@ namespace AntigravityTokenMonitor
             Button btnCalib = new Button
             {
                 Text = "주간 % 보정",
-                Location = new Point(130, 460),
+                Location = new Point(130, 480),
                 Size = new Size(110, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
@@ -1015,7 +1226,7 @@ namespace AntigravityTokenMonitor
             Button btnClose = new Button
             {
                 Text = "닫기",
-                Location = new Point(522, 460),
+                Location = new Point(522, 480),
                 Size = new Size(90, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
@@ -1032,8 +1243,8 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v3.0)",
-                Size = new Size(520, 520),
+                Text = "주간 쿼터 설정 & 배율 보정 (v3.1)",
+                Size = new Size(520, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
@@ -1044,19 +1255,19 @@ namespace AntigravityTokenMonitor
             // 1. 주간 잔여 % 및 배율 보정 그룹
             GroupBox gbCalib = new GroupBox
             {
-                Text = "🎯 [기능 1] 주간 잔여 % 보정 & 배율 자동 조절",
+                Text = "🎯 [기능 1] 주간 잔여 % 보정 & 배율 수동/자동 조절",
                 Location = new Point(15, 15),
-                Size = new Size(475, 190),
+                Size = new Size(475, 230),
                 ForeColor = Color.FromArgb(255, 200, 100),
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Bold)
             };
 
             Label lblInfo = new Label
             {
-                Text = string.Format("공식 웹에서 확인한 [현재 주간 잔여 %]를 입력하세요.\r\n(5h 실측: {0:F1}%, 리셋: {1} | 적용 배율: {2:F1}배)\r\n※ 동일 5시간 세션 내에서 2회 이상 입력 시 배율이 자동 조절됩니다.",
-                    _state.Remaining5HourPercent, string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr, _config.weekly_multiplier),
+                Text = string.Format("공식 웹에서 확인한 [현재 주간 잔여 %]를 입력하세요.\r\n(5h 실측: {0:F1}%, 리셋: {1})\r\n※ 동일 5시간 세션 내에서 2회 이상 입력 시 배율이 자동 조절됩니다.",
+                    _state.Remaining5HourPercent, string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr),
                 Location = new Point(15, 25),
-                Size = new Size(445, 60),
+                Size = new Size(445, 55),
                 ForeColor = Color.FromArgb(220, 230, 240),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
             };
@@ -1065,8 +1276,8 @@ namespace AntigravityTokenMonitor
             Label lblInput = new Label
             {
                 Text = "주간 잔여 %:",
-                Location = new Point(15, 95),
-                Size = new Size(100, 25),
+                Location = new Point(15, 88),
+                Size = new Size(95, 25),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1074,8 +1285,8 @@ namespace AntigravityTokenMonitor
 
             TextBox txtWk = new TextBox
             {
-                Location = new Point(120, 93),
-                Size = new Size(90, 25),
+                Location = new Point(115, 86),
+                Size = new Size(70, 25),
                 Font = new Font("Consolas", 10),
                 Text = _state.RemainingWeeklyPercent.ToString("F1")
             };
@@ -1084,8 +1295,8 @@ namespace AntigravityTokenMonitor
             Label lblUnit = new Label
             {
                 Text = "%",
-                Location = new Point(215, 95),
-                Size = new Size(25, 25),
+                Location = new Point(190, 88),
+                Size = new Size(20, 25),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1094,7 +1305,7 @@ namespace AntigravityTokenMonitor
             Button btnSave = new Button
             {
                 Text = "주간 % 보정 저장",
-                Location = new Point(255, 90),
+                Location = new Point(220, 83),
                 Size = new Size(130, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
@@ -1109,8 +1320,6 @@ namespace AntigravityTokenMonitor
                     RecordUserWeeklyCalibration(val);
                     MessageBox.Show(f, string.Format("주간 잔여량이 {0:F1}% 로 보정되었습니다.\r\n현재 적용 주간/일간 배율: {1:F1}배", val, _config.weekly_multiplier),
                         "보정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    lblInfo.Text = string.Format("공식 웹에서 확인한 [현재 주간 잔여 %]를 입력하세요.\r\n(5h 실측: {0:F1}%, 리셋: {1} | 적용 배율: {2:F1}배)\r\n※ 동일 5시간 세션 내에서 2회 이상 입력 시 배율이 자동 조절됩니다.",
-                        _state.Remaining5HourPercent, string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr, _config.weekly_multiplier);
                 }
                 else
                 {
@@ -1118,13 +1327,82 @@ namespace AntigravityTokenMonitor
                 }
             };
             gbCalib.Controls.Add(btnSave);
+
+            // 배율 직접 수정 영역
+            Label lblMult = new Label
+            {
+                Text = "적용 배율:",
+                Location = new Point(15, 135),
+                Size = new Size(95, 25),
+                ForeColor = Color.FromArgb(200, 220, 255),
+                Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
+            };
+            gbCalib.Controls.Add(lblMult);
+
+            TextBox txtMult = new TextBox
+            {
+                Location = new Point(115, 133),
+                Size = new Size(70, 25),
+                Font = new Font("Consolas", 10),
+                Text = _config.weekly_multiplier.ToString("F1")
+            };
+            gbCalib.Controls.Add(txtMult);
+
+            Label lblMultUnit = new Label
+            {
+                Text = "배",
+                Location = new Point(190, 135),
+                Size = new Size(25, 25),
+                ForeColor = Color.White,
+                Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
+            };
+            gbCalib.Controls.Add(lblMultUnit);
+
+            Button btnSaveMult = new Button
+            {
+                Text = "배율 직접 적용",
+                Location = new Point(220, 130),
+                Size = new Size(130, 30),
+                FlatStyle = FlatStyle.Flat,
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(52, 152, 219),
+                Font = new Font("맑은 고딕", 9f, FontStyle.Bold)
+            };
+            btnSaveMult.Click += delegate(object sender, EventArgs e)
+            {
+                double mVal;
+                if (double.TryParse(txtMult.Text.Trim(), out mVal) && mVal >= 1.0 && mVal <= 500.0)
+                {
+                    _config.weekly_multiplier = Math.Round(mVal, 2);
+                    SaveConfig(_config);
+                    PerformCheck();
+                    MessageBox.Show(f, string.Format("주간/일간 배율이 {0:F1}배로 직접 설정되었습니다.", _config.weekly_multiplier),
+                        "배율 설정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show(f, "1.0 ~ 500.0 사이의 올바른 배율 숫자를 입력하세요.", "입력 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+            gbCalib.Controls.Add(btnSaveMult);
+
+            Label lblCycleInfo = new Label
+            {
+                Text = string.Format("🌱 이번 주 첫 토큰 소비 시점: {0}", _state.WeeklyFirstActiveTimeStr),
+                Location = new Point(15, 185),
+                Size = new Size(445, 25),
+                ForeColor = Color.FromArgb(150, 230, 150),
+                Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
+            };
+            gbCalib.Controls.Add(lblCycleInfo);
+
             f.Controls.Add(gbCalib);
 
             // 2. 주간 초기화 시간 간편 맞춤 그룹
             GroupBox gbTime = new GroupBox
             {
                 Text = "⏰ [기능 2] 주간 리셋 시간 간편 맞춤 (남은 시간 입력)",
-                Location = new Point(15, 220),
+                Location = new Point(15, 255),
                 Size = new Size(475, 200),
                 ForeColor = Color.FromArgb(100, 200, 255),
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Bold)
@@ -1151,7 +1429,6 @@ namespace AntigravityTokenMonitor
             };
             gbTime.Controls.Add(lblCurSetting);
 
-            // 일, 시간, 분 입력
             TextBox txtDays = new TextBox { Location = new Point(15, 105), Size = new Size(45, 25), Font = new Font("Consolas", 10), Text = "2" };
             Label lblD = new Label { Text = "일", Location = new Point(63, 107), Size = new Size(20, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
             TextBox txtHours = new TextBox { Location = new Point(88, 105), Size = new Size(45, 25), Font = new Font("Consolas", 10), Text = "5" };
@@ -1216,7 +1493,7 @@ namespace AntigravityTokenMonitor
             Button btnClose = new Button
             {
                 Text = "닫기",
-                Location = new Point(400, 435),
+                Location = new Point(400, 475),
                 Size = new Size(90, 32),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,

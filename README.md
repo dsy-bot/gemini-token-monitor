@@ -1,14 +1,16 @@
-# ⚡ Antigravity Token Monitor v4.0
+﻿# ⚡ Antigravity Token Monitor v4.0
+
+[🌐 Read in English (README_EN.md)](README_EN.md)
 
 > **Antigravity (Gemini) 토큰 쿼터 실시간 모니터링, Upstash Redis 클라우드 동기화 & 주간 배율 자동보정 시스템**  
 > 외부 런타임(Python/Node.js 등) 설치가 전혀 필요 없는 **초경량 무설치 단일 실행 파일(.exe)** 로 동작하며, 백그라운드 유휴 메모리를 **1.48 MB** 로 유지합니다.
 
 ---
 
-## 🌟 v4.0 주요 핵심 기능
+## 🌟 주요 핵심 기능
 
 1. **🎯 5시간 공인 실시간 쿼터 직결**:
-   -  ntigravity-usage quota --json 및 로컬 언어 서버(language_server.exe) IPC 직결을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 무결점으로 수신.
+   - ntigravity-usage quota --json 및 로컬 언어 서버(language_server.exe) IPC 직결을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 무결점으로 수신.
 2. **☁️ Upstash Redis 클라우드 동기화 (직장 ↔ 집 PC)**:
    - 평생 무료(Free forever) Upstash Redis REST API를 연동하여 직장 PC와 집 PC 간 주간 소모량과 배율을 실시간 양방향 자동 동기화.
 3. **🎯 주간/일간 쿼터 배율 자동 조절 & 수동 직접 수정**:
@@ -23,8 +25,8 @@
    - 🟠 **경고 (Warning)**: 5h 속도 $\ge 20\%/\text{h}$ 또는 리셋 시점 잔여량 $\le 25\%$
    - 🟢 **정상 (Normal)**: 안정 범위
    - 트레이 아이콘에 실시간 잔여 % 숫자가 동적으로 실시간 드로잉.
-7. **🚀 메모리 3MB 극대화 압축**:
-   - Windows 네이티브 EmptyWorkingSet 및 2세대 GC 자동 트림 적용으로 유휴 메모리 점유율 **2.99 MB** 유지.
+7. **🚀 메모리 1.48MB 극대화 압축**:
+   - Windows 네이티브 EmptyWorkingSet, 2세대 GC 자동 트림, HTTP 소켓 즉시 반환 적용으로 유휴 메모리 **1.48 MB** 유지 (누수 0%).
 8. **📂 카테고리별/일자별 롤링 분리 로깅**:
    - /logs/usage/: 실시간 5h/주간 잔여량 기록
    - /logs/speed/: 5시간 소모 속도, 리셋 카운트다운, 고갈 예측치 기록
@@ -32,12 +34,34 @@
 
 ---
 
-## 🌐 Upstash 클라우드 동기화 설정 가이드 (직장 ↔ 집 PC 연동)
+## 🚀 Git을 이용한 30초 멀티 PC 세팅 & 업데이트
 
-집 PC와 직장 PC에서 동일한 주간 쿼터 상태를 공유하려면 **Upstash (평생 무료)** 를 1분 만에 설정할 수 있습니다.
+새로운 PC(직장, 노트북 등)에서 사용하거나 최신 버전으로 업데이트할 때 Git을 이용하면 매우 간편합니다.
+
+### 1. 새 PC에서 처음 설치할 때 (30초)
+터미널(PowerShell 또는 CMD)에서 아래 명령어를 실행합니다:
+`ash
+git clone https://github.com/dsy-bot/gemini-token-monitor.git
+`
+1. 복제된 gemini-token-monitor 폴더로 이동합니다.
+2. config.json 파일을 생성하고 본인의 **Upstash 동기화 정보**를 입력합니다 (아래 가이드 참조).
+3. AntigravityTokenMonitor.exe 를 실행합니다.
+4. 부팅 시 자동 시작을 원하시면 Install-Startup.bat 을 더블클릭합니다.
+
+### 2. 최신 버전으로 업데이트할 때 (5초)
+프로그램 폴더에서 터미널을 열고 아래 명령어를 입력하면 즉시 최신 버전으로 업데이트됩니다:
+`ash
+git pull
+`
+
+---
+
+## 🌐 Upstash 클라우드 동기화 1분 가이드 (직장 ↔ 집 PC 연동)
+
+집 PC와 직장 PC에서 동일한 주간 쿼터 상태를 공유하려면 **Upstash (평생 무료)** 를 설정할 수 있습니다.
 
 ### 1단계: Upstash 가입 및 무료 DB 생성
-1. [console.upstash.com](https://console.upstash.com) 에 접속하여 **Google 계정으로 간편 로그인**합니다. (신용카드 등록 불필요, 평생 무료)
+1. [console.upstash.com](https://console.upstash.com) 에 접속하여 **Google 계정으로 로그인**합니다. (신용카드 등록 불필요, 평생 무료)
 2. **Redis** 탭에서 **+ Create Database** 버튼을 클릭합니다.
 3. 설정 입력:
    - **Name**: gemini-token (원하는 이름 입력)
@@ -46,7 +70,7 @@
 4. 맨 아래 **Create** 버튼을 클릭하여 데이터베이스 생성을 완료합니다.
 
 ### 2단계: REST API 정보 복사
-1. 생성된 데이터베이스 상세 페이지의 **REST API** 섹션(또는 Connect $\rightarrow$ REST)으로 이동합니다.
+1. 생성된 데이터베이스 상세 페이지의 **REST API** 섹션으로 이동합니다.
 2. 아래 2가지 값을 복사합니다:
    - **UPSTASH_REDIS_REST_URL**: https://xxxx-xxxxx.upstash.io
    - **UPSTASH_REDIS_REST_TOKEN**: A... 로 시작하는 긴 비밀 토큰 문자열
@@ -74,7 +98,7 @@
 
 ## ⚙️ 설정 파일 (config.json) 가이드
 
-config.json은 프로그램 실행 시 자동 생성되며, // 주석을 자유롭게 지원합니다.
+config.json은 프로그램 실행 시 자동 생성되며, // 주석을 지원합니다.
 
 | 설정 항목 | 기본값 | 설명 |
 | :--- | :--- | :--- |
@@ -89,16 +113,15 @@ config.json은 프로그램 실행 시 자동 생성되며, // 주석을 자유�
 
 ---
 
-## 🚀 실행 및 빌드 방법
+## 🔨 실행 및 빌드 방법
 
 ### 1. 프로그램 실행
 - AntigravityTokenMonitor.exe 를 더블클릭하여 실행합니다.
-- 작업표시줄 시스템 트레이(우측 하단)에 실시간 % 배지가 나타납니다.
 - **트레이 아이콘 더블클릭**: 📊 실시간 현황 대시보드 열기
 - **트레이 아이콘 우클릭**: 지금 갱신, 주간 보정, 로그 폴더 열기, 설정 파일 열기, 종료
 
 ### 2. 빌드 (컴파일)
-- uild.bat 을 실행하면 Windows 기본 내장 C# 컴파일러(csc.exe)를 통해 1초 만에 최적화된 .exe가 생성됩니다. (별도 개발도구 설치 불필요)
+- uild.bat 을 실행하면 Windows 기본 내장 C# 컴파일러(csc.exe)를 통해 1초 만에 최적화된 .exe가 생성됩니다. (외부 도구 설치 불필요)
 
 ### 3. 윈도우 부팅 시 자동 시작 등록
 - **등록**: Install-Startup.bat 실행 (시작프로그램 바로가기 자동 생성)

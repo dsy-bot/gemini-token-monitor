@@ -1,14 +1,14 @@
-﻿# ⚡ Antigravity Token Monitor v3.3
+# ⚡ Antigravity Token Monitor v4.0
 
 > **Antigravity (Gemini) 토큰 쿼터 실시간 모니터링, Upstash Redis 클라우드 동기화 & 주간 배율 자동보정 시스템**  
-> 외부 런타임(Python/Node.js 등) 설치가 전혀 필요 없는 **초경량 무설치 단일 실행 파일(.exe)** 로 동작하며, 백그라운드 유휴 메모리를 **3MB 미만**으로 유지합니다.
+> 외부 런타임(Python/Node.js 등) 설치가 전혀 필요 없는 **초경량 무설치 단일 실행 파일(.exe)** 로 동작하며, 백그라운드 유휴 메모리를 **1.48 MB** 로 유지합니다.
 
 ---
 
-## 🌟 주요 핵심 기능
+## 🌟 v4.0 주요 핵심 기능
 
 1. **🎯 5시간 공인 실시간 쿼터 직결**:
-   - ntigravity-usage quota --json 및 로컬 언어 서버(language_server.exe) IPC 직결을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 무결점으로 수신.
+   -  ntigravity-usage quota --json 및 로컬 언어 서버(language_server.exe) IPC 직결을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 무결점으로 수신.
 2. **☁️ Upstash Redis 클라우드 동기화 (직장 ↔ 집 PC)**:
    - 평생 무료(Free forever) Upstash Redis REST API를 연동하여 직장 PC와 집 PC 간 주간 소모량과 배율을 실시간 양방향 자동 동기화.
 3. **🎯 주간/일간 쿼터 배율 자동 조절 & 수동 직접 수정**:

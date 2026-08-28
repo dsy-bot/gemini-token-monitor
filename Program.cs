@@ -149,7 +149,7 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = new MonitorState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v3.3 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v4.0 시작");
 
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
@@ -486,19 +486,23 @@ namespace AntigravityTokenMonitor
                 string csrfToken = string.Empty;
 
                 using (ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'language_server.exe'"))
+                using (ManagementObjectCollection results = searcher.Get())
                 {
-                    foreach (ManagementObject obj in searcher.Get())
+                    foreach (ManagementObject obj in results)
                     {
-                        lsPid = Convert.ToInt32(obj["ProcessId"]);
-                        string cmd = Convert.ToString(obj["CommandLine"]);
-                        if (!string.IsNullOrEmpty(cmd) && cmd.Contains("--csrf_token"))
+                        using (obj)
                         {
-                            int idx = cmd.IndexOf("--csrf_token");
-                            string sub = cmd.Substring(idx + 12).Trim();
-                            string[] parts = sub.Split(new char[] { ' ', '"', '\'' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (parts.Length > 0)
+                            lsPid = Convert.ToInt32(obj["ProcessId"]);
+                            string cmd = Convert.ToString(obj["CommandLine"]);
+                            if (!string.IsNullOrEmpty(cmd) && cmd.Contains("--csrf_token"))
                             {
-                                csrfToken = parts[0];
+                                int idx = cmd.IndexOf("--csrf_token");
+                                string sub = cmd.Substring(idx + 12).Trim();
+                                string[] parts = sub.Split(new char[] { ' ', '"', '\'' }, StringSplitOptions.RemoveEmptyEntries);
+                                if (parts.Length > 0)
+                                {
+                                    csrfToken = parts[0];
+                                }
                             }
                         }
                     }
@@ -545,6 +549,8 @@ namespace AntigravityTokenMonitor
                             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                             req.Method = "POST";
                             req.ContentType = "application/json";
+                            req.KeepAlive = false;
+                            req.ServicePoint.Expect100Continue = false;
                             req.Headers.Add("Connect-Protocol-Version", "1");
                             req.Headers.Add("X-Codeium-Csrf-Token", csrfToken);
                             req.Timeout = 2000;
@@ -758,7 +764,9 @@ namespace AntigravityTokenMonitor
 
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "GET";
-                req.UserAgent = "AntigravityTokenMonitor/3.1";
+                req.UserAgent = "AntigravityTokenMonitor/3.3";
+                req.KeepAlive = false;
+                req.ServicePoint.Expect100Continue = false;
                 req.Timeout = 3000;
                 if (!string.IsNullOrEmpty(_config.sync_api_key))
                 {
@@ -864,7 +872,9 @@ namespace AntigravityTokenMonitor
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = httpMethod;
                 req.ContentType = "application/json";
-                req.UserAgent = "AntigravityTokenMonitor/3.1";
+                req.UserAgent = "AntigravityTokenMonitor/3.3";
+                req.KeepAlive = false;
+                req.ServicePoint.Expect100Continue = false;
                 req.ContentLength = bytes.Length;
                 req.Timeout = 3000;
 
@@ -1033,7 +1043,7 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v3.3";
+            _notifyIcon.Text = "Antigravity Token Monitor v4.0";
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
@@ -1144,7 +1154,12 @@ namespace AntigravityTokenMonitor
                 IntPtr hIcon = bmp.GetHicon();
                 using (Icon tempIcon = Icon.FromHandle(hIcon))
                 {
+                    Icon oldIcon = _notifyIcon.Icon;
                     _notifyIcon.Icon = (Icon)tempIcon.Clone();
+                    if (oldIcon != null)
+                    {
+                        try { oldIcon.Dispose(); } catch { }
+                    }
                 }
                 NativeMethods.DestroyIcon(hIcon);
             }
@@ -1169,7 +1184,7 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v3.3 - 실시간 현황",
+                Text = "Antigravity Token Monitor v4.0 - 실시간 현황",
                 Size = new Size(640, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
@@ -1194,7 +1209,7 @@ namespace AntigravityTokenMonitor
             {
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v3.3 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v4.0 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
@@ -1304,7 +1319,7 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v3.3)",
+                Text = "주간 쿼터 설정 & 배율 보정 (v4.0)",
                 Size = new Size(520, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,

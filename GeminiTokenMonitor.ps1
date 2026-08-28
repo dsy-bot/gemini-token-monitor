@@ -695,7 +695,7 @@ try {
     # 9. 트레이 아이콘 및 컨텍스트 메뉴
     # ==========================================================================
     $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-    $script:NotifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+    $script:NotifyIcon.Icon = (New-BatteryIcon -Percent 100 -RiskLevel "GREEN")
     $script:NotifyIcon.Visible = $true
 
     $ctxMenu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -715,6 +715,11 @@ try {
     $script:NotifyIcon.ContextMenuStrip = $ctxMenu
     $script:NotifyIcon.Add_DoubleClick({ Show-StatusDialog })
 
+        $script:MainTimer = New-Object System.Windows.Forms.Timer
+    $script:MainTimer.Interval = $Global:Config.checkIntervalSeconds * 1000
+    $script:MainTimer.Add_Tick({ Start-BackgroundScanRunspace })
+    $script:MainTimer.Start()
+
     Start-BackgroundScanRunspace
 
     [System.Windows.Forms.Application]::Run()
@@ -724,3 +729,4 @@ try {
 } finally {
     if ($script:NotifyIcon) { $script:NotifyIcon.Visible = $false; $script:NotifyIcon.Dispose() }
 }
+

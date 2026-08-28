@@ -1,11 +1,11 @@
-﻿# ⚡ Antigravity Token Monitor v3.1
+# ⚡ Antigravity Token Monitor v3.3
 
 > **ntigravity-usage quota --json 및 로컬 언어 서버 직결 실시간 쿼터 모니터링, 클라우드 Key-Value 동기화 & 주간 배율 자동보정 시스템**
 > 무설치 단일 실행 파일(.exe) 형태로 백그라운드 메모리 점유율을 극도로 최소화(< 3MB)하여 동작합니다.
 
 ---
 
-## ✨ v3.1 핵심 기능
+## ✨ v3.3 핵심 기능
 
 1. **🎯 5시간 공인 실시간 쿼터 직결**:
    - ntigravity-usage quota --json 및 로컬 언어 서버 IPC 연동을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 실시간 무결점으로 수신.

@@ -149,7 +149,7 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = new MonitorState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v3.1 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v3.3 시작");
 
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
@@ -320,6 +320,11 @@ namespace AntigravityTokenMonitor
 
         private static void PerformCheck()
         {
+            PerformCheck(null);
+        }
+
+        private static void PerformCheck(Action onCompleted)
+        {
             if (_isChecking) return;
             _isChecking = true;
 
@@ -399,6 +404,10 @@ namespace AntigravityTokenMonitor
                 {
                     _isChecking = false;
                     TrimMemory();
+                    if (onCompleted != null)
+                    {
+                        try { onCompleted(); } catch { }
+                    }
                 }
             };
 
@@ -741,14 +750,21 @@ namespace AntigravityTokenMonitor
 
             try
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(_config.sync_url);
+                string url = _config.sync_url.Trim().TrimEnd('/');
+                if (url.Contains("upstash.io") && !url.Contains("/get/"))
+                {
+                    url = url + "/get/gemini_token";
+                }
+
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "GET";
+                req.UserAgent = "AntigravityTokenMonitor/3.1";
                 req.Timeout = 3000;
                 if (!string.IsNullOrEmpty(_config.sync_api_key))
                 {
-                    req.Headers.Add("X-Master-Key", _config.sync_api_key);
-                    req.Headers.Add("X-Access-Key", _config.sync_api_key);
-                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key);
+                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key.Trim());
+                    req.Headers.Add("X-Master-Key", _config.sync_api_key.Trim());
+                    req.Headers.Add("X-Access-Key", _config.sync_api_key.Trim());
                 }
 
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
@@ -761,7 +777,18 @@ namespace AntigravityTokenMonitor
                         Dictionary<string, object> dict = obj as Dictionary<string, object>;
                         if (dict != null)
                         {
-                            if (dict.ContainsKey("record"))
+                            // Upstash Redis format: {"result": "{\"remaining_weekly_percent\":...}"}
+                            if (dict.ContainsKey("result") && dict["result"] != null)
+                            {
+                                string innerJson = Convert.ToString(dict["result"]);
+                                if (!string.IsNullOrEmpty(innerJson) && innerJson.StartsWith("{"))
+                                {
+                                    object innerObj = _jsonSerializer.DeserializeObject(innerJson);
+                                    Dictionary<string, object> innerDict = innerObj as Dictionary<string, object>;
+                                    if (innerDict != null) dict = innerDict;
+                                }
+                            }
+                            else if (dict.ContainsKey("record"))
                             {
                                 Dictionary<string, object> rec = dict["record"] as Dictionary<string, object>;
                                 if (rec != null) dict = rec;
@@ -811,6 +838,18 @@ namespace AntigravityTokenMonitor
 
             try
             {
+                string url = _config.sync_url.Trim().TrimEnd('/');
+                string httpMethod = "PUT";
+
+                if (url.Contains("upstash.io"))
+                {
+                    httpMethod = "POST";
+                    if (!url.Contains("/set/"))
+                    {
+                        url = url + "/set/gemini_token";
+                    }
+                }
+
                 Dictionary<string, object> payload = new Dictionary<string, object>();
                 payload["updated_at"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 payload["remaining_weekly_percent"] = _state.RemainingWeeklyPercent;
@@ -822,16 +861,18 @@ namespace AntigravityTokenMonitor
                 string json = _jsonSerializer.Serialize(payload);
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(json);
 
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(_config.sync_url);
-                req.Method = "PUT"; // jsonbin.io 및 일반 KV API는 PUT/POST 지원
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = httpMethod;
                 req.ContentType = "application/json";
+                req.UserAgent = "AntigravityTokenMonitor/3.1";
                 req.ContentLength = bytes.Length;
                 req.Timeout = 3000;
+
                 if (!string.IsNullOrEmpty(_config.sync_api_key))
                 {
-                    req.Headers.Add("X-Master-Key", _config.sync_api_key);
-                    req.Headers.Add("X-Access-Key", _config.sync_api_key);
-                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key);
+                    req.Headers.Add("Authorization", "Bearer " + _config.sync_api_key.Trim());
+                    req.Headers.Add("X-Master-Key", _config.sync_api_key.Trim());
+                    req.Headers.Add("X-Access-Key", _config.sync_api_key.Trim());
                 }
 
                 using (Stream s = req.GetRequestStream())
@@ -841,7 +882,7 @@ namespace AntigravityTokenMonitor
 
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                 {
-                    // 전송 성공
+                    WriteSystemLog("INFO", "클라우드 Key-Value 동기화 전송 성공");
                 }
             }
             catch (Exception ex)
@@ -992,7 +1033,7 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v3.1";
+            _notifyIcon.Text = "Antigravity Token Monitor v3.3";
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
@@ -1128,7 +1169,7 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v3.1 - 실시간 현황",
+                Text = "Antigravity Token Monitor v3.3 - 실시간 현황",
                 Size = new Size(640, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
@@ -1153,7 +1194,7 @@ namespace AntigravityTokenMonitor
             {
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v3.1 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v3.3 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
@@ -1208,7 +1249,27 @@ namespace AntigravityTokenMonitor
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(52, 152, 219)
             };
-            btnRefresh.Click += delegate(object sender, EventArgs e) { PerformCheck(); refreshText(); };
+            btnRefresh.Click += delegate(object sender, EventArgs e)
+            {
+                btnRefresh.Text = "갱신 중...";
+                btnRefresh.Enabled = false;
+                PerformCheck(delegate
+                {
+                    try
+                    {
+                        if (form != null && !form.IsDisposed)
+                        {
+                            form.BeginInvoke(new Action(delegate
+                            {
+                                refreshText();
+                                btnRefresh.Text = "지금 갱신";
+                                btnRefresh.Enabled = true;
+                            }));
+                        }
+                    }
+                    catch { }
+                });
+            };
             form.Controls.Add(btnRefresh);
 
             Button btnCalib = new Button
@@ -1243,7 +1304,7 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v3.1)",
+                Text = "주간 쿼터 설정 & 배율 보정 (v3.3)",
                 Size = new Size(520, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,

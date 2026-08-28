@@ -182,10 +182,10 @@ try {
         if ($Global:State.IsScanning) { return }
         $Global:State.IsScanning = $true
 
-        $rs = [runspacefactory]::CreateRunspace(); $rs.Open()
-        $rs.SessionStateProxy.SetVariable("SyncState",  $Global:State)
-        $rs.SessionStateProxy.SetVariable("SyncConfig", $Global:Config)
-        $ps = [powershell]::Create(); $ps.Runspace = $rs
+        $script:ScanRunspace = [runspacefactory]::CreateRunspace(); $script:ScanRunspace.Open()
+        $script:ScanRunspace.SessionStateProxy.SetVariable("SyncState",  $Global:State)
+        $script:ScanRunspace.SessionStateProxy.SetVariable("SyncConfig", $Global:Config)
+        $script:ScanPS = [powershell]::Create(); $script:ScanPS.Runspace = $script:ScanRunspace
 
         $scanBlock = {
             try {
@@ -367,20 +367,26 @@ try {
             $SyncState.IsScanning = $false
         }
 
-        $ps.AddScript($scanBlock) | Out-Null
-        $handle = $ps.BeginInvoke()
+        $script:ScanPS.AddScript($scanBlock) | Out-Null
+        $script:ScanHandle = $script:ScanPS.BeginInvoke()
 
-        $pollTimer = New-Object System.Windows.Forms.Timer
-        $pollTimer.Interval = 500
-        $pollTimer.Add_Tick({
-            if ($handle.IsCompleted) {
-                $pollTimer.Stop(); $pollTimer.Dispose()
-                try { $ps.EndInvoke($handle) } catch {}
-                $ps.Dispose(); $rs.Dispose()
+        if ($script:ScanPollTimer) {
+            $script:ScanPollTimer.Stop()
+            $script:ScanPollTimer.Dispose()
+        }
+        $script:ScanPollTimer = New-Object System.Windows.Forms.Timer
+        $script:ScanPollTimer.Interval = 300
+        $script:ScanPollTimer.Add_Tick({
+            if ($script:ScanHandle -and $script:ScanHandle.IsCompleted) {
+                $script:ScanPollTimer.Stop()
+                try { $script:ScanPS.EndInvoke($script:ScanHandle) } catch {}
+                if ($script:ScanPS) { $script:ScanPS.Dispose() }
+                if ($script:ScanRunspace) { $script:ScanRunspace.Dispose() }
+                $script:ScanHandle = $null
                 Refresh-UIElements
             }
         })
-        $pollTimer.Start()
+        $script:ScanPollTimer.Start()
     }
 
     # ==========================================================================

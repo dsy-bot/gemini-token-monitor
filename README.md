@@ -1,4 +1,4 @@
-# ⚡ Antigravity Token Monitor v4.2
+# ⚡ Antigravity Token Monitor v4.3
 
 [🌐 Read in English (README_EN.md)](README_EN.md)
 

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 echo ======================================================
-echo   Building Antigravity Token Monitor v4.2 (.exe)
+echo   Building Antigravity Token Monitor v4.3 (.exe)
 echo ======================================================
 
 set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe

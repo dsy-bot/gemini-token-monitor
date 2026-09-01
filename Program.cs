@@ -92,6 +92,8 @@ namespace AntigravityTokenMonitor
         public string WeeklyFirstActiveTimeStr { get; set; }
         public double Baseline5hAtWeeklyReset { get; set; }
         public double LastTracked5HourPercent { get; set; }
+        public string LastTracked5HourResetTime { get; set; }
+        public double WeeklyCumulative5hConsumed { get; set; }
 
         public MonitorState()
         {
@@ -113,6 +115,8 @@ namespace AntigravityTokenMonitor
             WeeklyFirstActiveTimeStr = "기록 없음";
             Baseline5hAtWeeklyReset = 100.0;
             LastTracked5HourPercent = 100.0;
+            LastTracked5HourResetTime = string.Empty;
+            WeeklyCumulative5hConsumed = 0.0;
         }
     }
 
@@ -165,7 +169,7 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = new MonitorState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v4.2 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v4.3 시작");
 
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
@@ -388,6 +392,18 @@ namespace AntigravityTokenMonitor
                     // 주간 리셋 주기 확인 및 새 주간 첫 토큰 소비 추적
                     CheckWeeklyCycleAndFirstUsage(rem5h, resetTimeStr);
 
+                    // 5시간 실소모량 누적 합산 (주간 누적 소모량 추적용)
+                    if (_state.LastTracked5HourPercent > 0 && !string.IsNullOrEmpty(_state.LastTracked5HourResetTime) && _state.LastTracked5HourResetTime == resetTimeStr)
+                    {
+                        double delta5h = _state.LastTracked5HourPercent - rem5h;
+                        if (delta5h > 0.001)
+                        {
+                            _state.WeeklyCumulative5hConsumed += delta5h;
+                        }
+                    }
+                    _state.LastTracked5HourPercent = rem5h;
+                    _state.LastTracked5HourResetTime = resetTimeStr;
+
                     double remWk = CalculateEstimatedWeeklyPercent(rem5h, resetTimeStr);
                     _state.RemainingWeeklyPercent = remWk;
 
@@ -481,6 +497,7 @@ namespace AntigravityTokenMonitor
                     _state.RemainingWeeklyPercent = 100.0;
                     _state.WeeklyFirstActiveTimeStr = "아직 소비 없음 (리셋 대기)";
                     _state.Baseline5hAtWeeklyReset = current5hRem;
+                    _state.WeeklyCumulative5hConsumed = 0.0;
 
                     WeeklyCalibPoint anchorPoint = new WeeklyCalibPoint
                     {
@@ -683,24 +700,45 @@ namespace AntigravityTokenMonitor
                                 object[] models = cmData["clientModelConfigs"] as object[];
                                 if (models != null && models.Length > 0)
                                 {
+                                    double lowestFraction = double.MaxValue;
+                                    string lowestResetTime = string.Empty;
+
                                     foreach (object m in models)
                                     {
                                         Dictionary<string, object> mDict = m as Dictionary<string, object>;
                                         if (mDict != null && mDict.ContainsKey("quotaInfo"))
                                         {
+                                            string label = mDict.ContainsKey("label") ? Convert.ToString(mDict["label"]) : "";
+                                            string modelId = mDict.ContainsKey("modelId") ? Convert.ToString(mDict["modelId"]) : "";
+
                                             Dictionary<string, object> qInfo = mDict["quotaInfo"] as Dictionary<string, object>;
-                                            if (qInfo != null)
+                                            if (qInfo != null && qInfo.ContainsKey("remainingFraction") && qInfo["remainingFraction"] != null)
                                             {
-                                                if (qInfo.ContainsKey("resetTime") && qInfo["resetTime"] != null)
+                                                double frac = Convert.ToDouble(qInfo["remainingFraction"]);
+                                                string rTime = qInfo.ContainsKey("resetTime") && qInfo["resetTime"] != null ? Convert.ToString(qInfo["resetTime"]) : "";
+
+                                                // 1. Gemini 모델 최우선 선택 (Claude / GPT-OSS 100% 가짜 쿼터 배제)
+                                                if (label.IndexOf("Gemini", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                    modelId.IndexOf("gemini", StringComparison.OrdinalIgnoreCase) >= 0)
                                                 {
-                                                    resetTimeStr = Convert.ToString(qInfo["resetTime"]);
+                                                    resetTimeStr = rTime;
+                                                    return Math.Round(frac * 100.0, 1);
                                                 }
-                                                if (qInfo.ContainsKey("remainingFraction") && qInfo["remainingFraction"] != null)
+
+                                                // 2. Gemini가 없을 경우 실제 소모 중인 최저 잔여량 모델 기록
+                                                if (frac < lowestFraction)
                                                 {
-                                                    return Math.Round(Convert.ToDouble(qInfo["remainingFraction"]) * 100.0, 1);
+                                                    lowestFraction = frac;
+                                                    lowestResetTime = rTime;
                                                 }
                                             }
                                         }
+                                    }
+
+                                    if (lowestFraction < double.MaxValue)
+                                    {
+                                        resetTimeStr = lowestResetTime;
+                                        return Math.Round(lowestFraction * 100.0, 1);
                                     }
                                 }
                             }
@@ -796,8 +834,47 @@ namespace AntigravityTokenMonitor
                     Timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
                 };
 
+                // 1. 이번 주 주간 리셋(100%) 기준점 탐색
+                WeeklyCalibPoint weeklyAnchor = null;
                 if (_calibHistory != null && _calibHistory.Count > 0)
                 {
+                    for (int i = _calibHistory.Count - 1; i >= 0; i--)
+                    {
+                        if (_calibHistory[i].UserWeeklyPercent >= 99.9)
+                        {
+                            weeklyAnchor = _calibHistory[i];
+                            break;
+                        }
+                    }
+                }
+
+                double totalWkConsumed = weeklyAnchor != null ? (weeklyAnchor.UserWeeklyPercent - userWkPct) : (100.0 - userWkPct);
+                double total5hConsumed = _state.WeeklyCumulative5hConsumed;
+
+                // 누적 기록이 아직 적을 경우 Anchor와 현재 5h 차이도 합산
+                if (weeklyAnchor != null && total5hConsumed < 0.5)
+                {
+                    if (weeklyAnchor.ResetTime == currentReset)
+                    {
+                        total5hConsumed = Math.Max(0.0, weeklyAnchor.FiveHourPercent - current5h);
+                    }
+                }
+
+                // 2. 누적 총량 기반 배율 자동 계산 (소모량이 유의미할 때)
+                if (totalWkConsumed >= 0.1 && total5hConsumed >= 0.5)
+                {
+                    double calculatedMultiplier = Math.Round(total5hConsumed / totalWkConsumed, 1);
+                    if (calculatedMultiplier >= 1.0 && calculatedMultiplier <= 300.0)
+                    {
+                        _config.weekly_multiplier = calculatedMultiplier;
+                        SaveConfig(_config);
+                        WriteSystemLog("INFO", string.Format("🎯 누적 총량 기반 배율 자동보정 완료: {0:F1}배 (이번주 5h누적소모: {1:F1}%, 주간소모: {2:F1}%)",
+                            calculatedMultiplier, total5hConsumed, totalWkConsumed));
+                    }
+                }
+                else if (_calibHistory != null && _calibHistory.Count > 0)
+                {
+                    // 3. 누적량이 부족할 경우 직전 매칭 포인트 2차 검사
                     WeeklyCalibPoint prevMatch = null;
                     for (int i = _calibHistory.Count - 1; i >= 0; i--)
                     {
@@ -813,14 +890,14 @@ namespace AntigravityTokenMonitor
                         double delta5h = prevMatch.FiveHourPercent - current5h;
                         double deltaWk = prevMatch.UserWeeklyPercent - userWkPct;
 
-                        if (delta5h >= 2.0 && deltaWk >= 0.1)
+                        if (delta5h >= 1.0 && deltaWk >= 0.1)
                         {
-                            double calculatedMultiplier = Math.Round(delta5h / deltaWk, 2);
-                            if (calculatedMultiplier >= 5.0 && calculatedMultiplier <= 150.0)
+                            double calculatedMultiplier = Math.Round(delta5h / deltaWk, 1);
+                            if (calculatedMultiplier >= 1.0 && calculatedMultiplier <= 300.0)
                             {
                                 _config.weekly_multiplier = calculatedMultiplier;
                                 SaveConfig(_config);
-                                WriteSystemLog("INFO", string.Format("주간/일간 배율 자동보정 완료: {0}배 (5h소모: {1:F1}%, 주간소모: {2:F1}%)",
+                                WriteSystemLog("INFO", string.Format("주간/일간 배율 세션 보정 완료: {0:F1}배 (5h소모: {1:F1}%, 주간소모: {2:F1}%)",
                                     calculatedMultiplier, delta5h, deltaWk));
                             }
                         }
@@ -862,7 +939,7 @@ namespace AntigravityTokenMonitor
 
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "GET";
-                req.UserAgent = "AntigravityTokenMonitor/4.2";
+                req.UserAgent = "AntigravityTokenMonitor/4.3";
                 req.KeepAlive = false;
                 req.ServicePoint.Expect100Continue = false;
                 req.Timeout = 3000;
@@ -920,6 +997,10 @@ namespace AntigravityTokenMonitor
                             {
                                 _state.WeeklyFirstActiveTimeStr = Convert.ToString(dict["weekly_first_active_time"]);
                             }
+                            if (dict.ContainsKey("weekly_cumulative_5h_consumed") && dict["weekly_cumulative_5h_consumed"] != null)
+                            {
+                                _state.WeeklyCumulative5hConsumed = Convert.ToDouble(dict["weekly_cumulative_5h_consumed"]);
+                            }
 
                             SaveConfig(_config);
                             WriteSystemLog("INFO", string.Format("클라우드 Key-Value 동기화 수신 성공 (주간%: {0:F1}%, 배율: {1:F1}배)",
@@ -963,6 +1044,7 @@ namespace AntigravityTokenMonitor
                 payload["weekly_reset_day"] = _config.weekly_reset_day;
                 payload["weekly_reset_time"] = _config.weekly_reset_time;
                 payload["weekly_first_active_time"] = _state.WeeklyFirstActiveTimeStr;
+                payload["weekly_cumulative_5h_consumed"] = _state.WeeklyCumulative5hConsumed;
 
                 string json = _jsonSerializer.Serialize(payload);
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(json);
@@ -970,7 +1052,7 @@ namespace AntigravityTokenMonitor
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = httpMethod;
                 req.ContentType = "application/json";
-                req.UserAgent = "AntigravityTokenMonitor/4.2";
+                req.UserAgent = "AntigravityTokenMonitor/4.3";
                 req.KeepAlive = false;
                 req.ServicePoint.Expect100Continue = false;
                 req.ContentLength = bytes.Length;
@@ -1190,7 +1272,7 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v4.2";
+            _notifyIcon.Text = "Antigravity Token Monitor v4.3";
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
@@ -1331,7 +1413,7 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v4.2 - 실시간 현황",
+                Text = "Antigravity Token Monitor v4.3 - 실시간 현황",
                 Size = new Size(640, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
@@ -1356,7 +1438,7 @@ namespace AntigravityTokenMonitor
             {
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v4.2 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v4.3 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
@@ -1467,7 +1549,7 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v4.2)",
+                Text = "주간 쿼터 설정 & 배율 보정 (v4.3)",
                 Size = new Size(520, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,

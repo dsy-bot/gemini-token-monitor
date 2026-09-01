@@ -1,8 +1,8 @@
-﻿# ⚡ Antigravity Token Monitor v4.0
+# ⚡ Antigravity Token Monitor v4.2
 
 [🌐 Read in English (README_EN.md)](README_EN.md)
 
-> **Antigravity (Gemini) 토큰 쿼터 실시간 모니터링, Upstash Redis 클라우드 동기화 & 주간 배율 자동보정 시스템**  
+> **Antigravity (Gemini) 토큰 쿼터 실시간 모니터링, Upstash Redis 클라우드 동기화 & 실근무 스케줄 기반 현실적 쿼터 예측 시스템**  
 > 외부 런타임(Python/Node.js 등) 설치가 전혀 필요 없는 **초경량 무설치 단일 실행 파일(.exe)** 로 동작하며, 백그라운드 유휴 메모리를 **1.48 MB** 로 유지합니다.
 
 ---
@@ -11,25 +11,28 @@
 
 1. **🎯 5시간 공인 실시간 쿼터 직결**:
    - ntigravity-usage quota --json 및 로컬 언어 서버(language_server.exe) IPC 직결을 통해 5시간 쿼터 잔여 %와 공식 리셋 시각을 100% 무결점으로 수신.
-2. **☁️ Upstash Redis 클라우드 동기화 (직장 ↔ 집 PC)**:
+2. **🏢 요일별 출퇴근 스케줄 기반 현실적 쿼터 예측 (v4.1 신규)**:
+   - 퇴근 후, 수면 시간, 주말 등 에이전트를 쓰지 않는 비활동 시간을 자동 예외 처리.
+   - 리셋 시점까지의 **순수 실근무시간(Active Working Hours)** 만을 정밀 적분 계산하여 불필요한 주황/빨강불 오경보(False Alarm)를 100% 방지.
+3. **☁️ Upstash Redis 클라우드 동기화 (직장 ↔ 집 PC)**:
    - 평생 무료(Free forever) Upstash Redis REST API를 연동하여 직장 PC와 집 PC 간 주간 소모량과 배율을 실시간 양방향 자동 동기화.
-3. **🎯 주간/일간 쿼터 배율 자동 조절 & 수동 직접 수정**:
-   - 동일 5시간 세션 내 소모량을 기반으로 실제 주간/일간 배율($\text{Multiplier} = \frac{\Delta 5h\%}{\Delta Wk\%}$)을 전자동으로 계산 및 학습.
+4. **🎯 주간/일간 쿼터 배율 자동 조절 & 수동 직접 수정**:
+   - 동일 5시간 세션 내 소모량을 기반으로 실제 주간 배율($\text{Multiplier} = \frac{\Delta 5h\%}{\Delta Wk\%}$)을 전자동으로 계산 및 학습.
    - 보정 다이얼로그에서 배율 수치를 직접 원하는 값(예: 30.9배)으로 수정 및 즉시 적용 가능.
-4. **🌱 새 주간 사이클 리셋 & 첫 토큰 소비 시점 자동 추적**:
+5. **🌱 새 주간 사이클 리셋 & 첫 토큰 소비 시점 자동 추적**:
    - 주간 리셋 시각 경과 시 100% 자동 리셋 및 이후 첫 토큰 소모 발생 순간(FirstActiveTime)을 실시간 감지하여 대시보드와 로그에 기록.
-5. **⏰ 주간 리셋 시간 간편 맞춤 계산기**:
+6. **⏰ 주간 리셋 시간 간편 맞춤 계산기**:
    - 웹 화면에 표시된 남은 시간(예: 2일 5시간 30분)을 입력하면 초기화 요일과 시각을 자동 역산하여 config.json에 저장.
-6. **🚦 3단계 상태 판별 & 트레이 동적 배지 렌더링**:
+7. **🚦 3단계 상태 판별 & 트레이 동적 배지 렌더링**:
    - 🔴 **위험 (Danger)**: 리셋 시점 잔여량 $\le 15\%$
    - 🟠 **경고 (Warning)**: 5h 속도 $\ge 20\%/\text{h}$ 또는 리셋 시점 잔여량 $\le 25\%$
    - 🟢 **정상 (Normal)**: 안정 범위
    - 트레이 아이콘에 실시간 잔여 % 숫자가 동적으로 실시간 드로잉.
-7. **🚀 메모리 1.48MB 극대화 압축**:
+8. **🚀 메모리 1.48MB 극대화 압축**:
    - Windows 네이티브 EmptyWorkingSet, 2세대 GC 자동 트림, HTTP 소켓 즉시 반환 적용으로 유휴 메모리 **1.48 MB** 유지 (누수 0%).
-8. **📂 카테고리별/일자별 롤링 분리 로깅**:
+9. **📂 카테고리별/일자별 롤링 분리 로깅**:
    - /logs/usage/: 실시간 5h/주간 잔여량 기록
-   - /logs/speed/: 5시간 소모 속도, 리셋 카운트다운, 고갈 예측치 기록
+   - /logs/speed/: 5시간 소모 속도, 실근무 잔여시간, 리셋 카운트다운, 고갈 예측치 기록
    - /logs/system/: 시스템 상태 변경, 클라우드 동기화, 배율 자동보정 이력 기록
 
 ---
@@ -44,7 +47,7 @@
 git clone https://github.com/dsy-bot/gemini-token-monitor.git
 `
 1. 복제된 gemini-token-monitor 폴더로 이동합니다.
-2. config.json 파일을 생성하고 본인의 **Upstash 동기화 정보**를 입력합니다 (아래 가이드 참조).
+2. config.json 파일을 생성하고 본인의 **Upstash 동기화 정보 및 출퇴근 시간**을 입력합니다 (아래 가이드 참조).
 3. AntigravityTokenMonitor.exe 를 실행합니다.
 4. 부팅 시 자동 시작을 원하시면 Install-Startup.bat 을 더블클릭합니다.
 
@@ -81,13 +84,23 @@ git pull
 {
   // 요일 복사용: Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday
   "interval_minutes": 10,
-  "daily_reset_time": "00:00",
   "weekly_reset_day": "Monday",
   "weekly_reset_time": "00:00",
   "weekly_multiplier": 30.9,
   "sync_enabled": true,
   "sync_url": "https://xxxx-xxxxx.upstash.io",
-  "sync_api_key": "복사한_UPSTASH_REST_TOKEN_입력"
+  "sync_api_key": "복사한_UPSTASH_REST_TOKEN_입력",
+
+  // 요일별 출퇴근(활동) 시간대 (쉬는 날은 "off")
+  "work_schedule": {
+    "Monday": "09:00-18:00",
+    "Tuesday": "09:00-18:00",
+    "Wednesday": "09:00-18:00",
+    "Thursday": "09:00-18:00",
+    "Friday": "09:00-18:00",
+    "Saturday": "off",
+    "Sunday": "off"
+  }
 }
 `
 
@@ -103,13 +116,13 @@ config.json은 프로그램 실행 시 자동 생성되며, // 주석을 지원�
 | 설정 항목 | 기본값 | 설명 |
 | :--- | :--- | :--- |
 | interval_minutes | 10 | 백그라운드 실시간 쿼터 자동 조회 주기 (분 단위) |
-| daily_reset_time | "00:00" | 24시간 형식 일간 기준 시각 (HH:mm) |
 | weekly_reset_day | "Monday" | 주간 초기화 요일 (Monday ~ Sunday) |
 | weekly_reset_time| "00:00" | 24시간 형식 주간 초기화 시각 (HH:mm) |
 | weekly_multiplier| 30.9 | 5시간 쿼터 대비 주간 쿼터 배율 ($\Delta 5h / \Delta Wk$) |
 | sync_enabled | alse | 클라우드 동기화 활성화 여부 (	rue / alse) |
 | sync_url | "" | Upstash Redis REST Endpoint URL |
 | sync_api_key | "" | Upstash Redis REST Token |
+| work_schedule | 월~금 09:00-18:00 | 요일별 출퇴근 시간대 ("HH:mm-HH:mm" 또는 "off") |
 
 ---
 

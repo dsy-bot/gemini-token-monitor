@@ -33,24 +33,33 @@ namespace AntigravityTokenMonitor
     public class AppConfig
     {
         public int interval_minutes { get; set; }
-        public string daily_reset_time { get; set; }
         public string weekly_reset_day { get; set; }
         public string weekly_reset_time { get; set; }
         public double weekly_multiplier { get; set; }
         public bool sync_enabled { get; set; }
         public string sync_url { get; set; }
         public string sync_api_key { get; set; }
+        public Dictionary<string, string> work_schedule { get; set; }
 
         public AppConfig()
         {
             interval_minutes = 10;
-            daily_reset_time = "00:00";
             weekly_reset_day = "Monday";
             weekly_reset_time = "00:00";
             weekly_multiplier = 30.9;
             sync_enabled = false;
             sync_url = string.Empty;
             sync_api_key = string.Empty;
+            work_schedule = new Dictionary<string, string>
+            {
+                { "Monday", "09:00-18:00" },
+                { "Tuesday", "09:00-18:00" },
+                { "Wednesday", "09:00-18:00" },
+                { "Thursday", "09:00-18:00" },
+                { "Friday", "09:00-18:00" },
+                { "Saturday", "off" },
+                { "Sunday", "off" }
+            };
         }
     }
 
@@ -71,15 +80,18 @@ namespace AntigravityTokenMonitor
         public double PredictedWeeklyRemaining { get; set; }
         public double HoursUntil5HourReset { get; set; }
         public double HoursUntilWeeklyReset { get; set; }
+        public double ActiveHoursUntil5HourReset { get; set; }
+        public double ActiveHoursUntilWeeklyReset { get; set; }
         public string ResetTime5HourStr { get; set; }
         public StatusLevel CurrentStatus { get; set; }
         public DateTime LastCheckTime { get; set; }
         public string LastErrorMessage { get; set; }
         public string RawJson { get; set; }
 
-        // v3.1 신규: 주간 사이클 및 첫 소비 시점 추적
         public string LastWeeklyResetId { get; set; }
         public string WeeklyFirstActiveTimeStr { get; set; }
+        public double Baseline5hAtWeeklyReset { get; set; }
+        public double LastTracked5HourPercent { get; set; }
 
         public MonitorState()
         {
@@ -90,6 +102,8 @@ namespace AntigravityTokenMonitor
             PredictedWeeklyRemaining = 100.0;
             HoursUntil5HourReset = 5.0;
             HoursUntilWeeklyReset = 168.0;
+            ActiveHoursUntil5HourReset = 5.0;
+            ActiveHoursUntilWeeklyReset = 45.0;
             ResetTime5HourStr = string.Empty;
             CurrentStatus = StatusLevel.Normal;
             LastCheckTime = DateTime.MinValue;
@@ -97,6 +111,8 @@ namespace AntigravityTokenMonitor
             RawJson = string.Empty;
             LastWeeklyResetId = string.Empty;
             WeeklyFirstActiveTimeStr = "기록 없음";
+            Baseline5hAtWeeklyReset = 100.0;
+            LastTracked5HourPercent = 100.0;
         }
     }
 
@@ -149,7 +165,7 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = new MonitorState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v4.0 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v4.2 시작");
 
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
@@ -190,6 +206,19 @@ namespace AntigravityTokenMonitor
                     if (cfg != null)
                     {
                         if (cfg.weekly_multiplier <= 0.0) cfg.weekly_multiplier = 30.9;
+                        if (cfg.work_schedule == null)
+                        {
+                            cfg.work_schedule = new Dictionary<string, string>
+                            {
+                                { "Monday", "09:00-18:00" },
+                                { "Tuesday", "09:00-18:00" },
+                                { "Wednesday", "09:00-18:00" },
+                                { "Thursday", "09:00-18:00" },
+                                { "Friday", "09:00-18:00" },
+                                { "Saturday", "off" },
+                                { "Sunday", "off" }
+                            };
+                        }
                         return cfg;
                     }
                 }
@@ -212,28 +241,29 @@ namespace AntigravityTokenMonitor
             try
             {
                 string configPath = Path.Combine(_appDir, "config.json");
-                string formattedJson = string.Format(
-                    "{{\r\n" +
-                    "  // 요일 복사용: Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday\r\n" +
-                    "  \"interval_minutes\": {0},\r\n" +
-                    "  \"daily_reset_time\": \"{1}\",\r\n" +
-                    "  \"weekly_reset_day\": \"{2}\",\r\n" +
-                    "  \"weekly_reset_time\": \"{3}\",\r\n" +
-                    "  \"weekly_multiplier\": {4:F1},\r\n" +
-                    "  \"sync_enabled\": {5},\r\n" +
-                    "  \"sync_url\": \"{6}\",\r\n" +
-                    "  \"sync_api_key\": \"{7}\"\r\n" +
-                    "}}",
-                    cfg.interval_minutes,
-                    cfg.daily_reset_time ?? "00:00",
-                    cfg.weekly_reset_day ?? "Monday",
-                    cfg.weekly_reset_time ?? "00:00",
-                    cfg.weekly_multiplier > 0 ? cfg.weekly_multiplier : 30.9,
-                    cfg.sync_enabled ? "true" : "false",
-                    cfg.sync_url ?? "",
-                    cfg.sync_api_key ?? ""
-                );
-                File.WriteAllText(configPath, formattedJson, System.Text.Encoding.UTF8);
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  // 요일 복사용: Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday");
+                sb.AppendLine(string.Format("  \"interval_minutes\": {0},", cfg.interval_minutes));
+                sb.AppendLine(string.Format("  \"weekly_reset_day\": \"{0}\",", cfg.weekly_reset_day ?? "Monday"));
+                sb.AppendLine(string.Format("  \"weekly_reset_time\": \"{0}\",", cfg.weekly_reset_time ?? "00:00"));
+                sb.AppendLine(string.Format("  \"weekly_multiplier\": {0:F1},", cfg.weekly_multiplier > 0 ? cfg.weekly_multiplier : 30.9));
+                sb.AppendLine(string.Format("  \"sync_enabled\": {0},", cfg.sync_enabled ? "true" : "false"));
+                sb.AppendLine(string.Format("  \"sync_url\": \"{0}\",", cfg.sync_url ?? ""));
+                sb.AppendLine(string.Format("  \"sync_api_key\": \"{0}\",", cfg.sync_api_key ?? ""));
+                sb.AppendLine("  // 요일별 출퇴근(활동) 시간대 (쉬는 날은 \"off\")");
+                sb.AppendLine("  \"work_schedule\": {");
+                string[] days = new string[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
+                for (int i = 0; i < days.Length; i++)
+                {
+                    string d = days[i];
+                    string val = "off";
+                    if (cfg.work_schedule != null && cfg.work_schedule.ContainsKey(d)) val = cfg.work_schedule[d];
+                    sb.AppendLine(string.Format("    \"{0}\": \"{1}\"{2}", d, val, i < days.Length - 1 ? "," : ""));
+                }
+                sb.AppendLine("  }");
+                sb.AppendLine("}");
+                File.WriteAllText(configPath, sb.ToString(), System.Text.Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -288,15 +318,15 @@ namespace AntigravityTokenMonitor
             }
         }
 
-        private static void WriteSpeedLog(double speed5h, double t5h, double pred5h, double tWk, double predWk, StatusLevel status)
+        private static void WriteSpeedLog(double speed5h, double t5h, double active5h, double pred5h, double tWk, double activeWk, double predWk, StatusLevel status)
         {
             try
             {
                 DateTime now = DateTime.Now;
                 string fileName = string.Format("{0}_speed.log", now.ToString("yyyyMMdd"));
                 string filePath = Path.Combine(_speedDir, fileName);
-                string line = string.Format("[{0}] Speed5h={1:F2}%/h, 5hResetIn={2:F2}h, Pred5hRem={3:F2}%, WkResetIn={4:F2}h, PredWkRem={5:F2}%, Status={6}",
-                    now.ToString("HH:mm:ss"), speed5h, t5h, pred5h, tWk, predWk, status);
+                string line = string.Format("[{0}] Speed5h={1:F2}%/h, 5hResetIn={2:F2}h(Act={3:F2}h), Pred5hRem={4:F2}%, WkResetIn={5:F2}h(Act={6:F2}h), PredWkRem={7:F2}%, Status={8}",
+                    now.ToString("HH:mm:ss"), speed5h, t5h, active5h, pred5h, tWk, activeWk, predWk, status);
                 File.AppendAllLines(filePath, new string[] { line }, System.Text.Encoding.UTF8);
             }
             catch (Exception ex)
@@ -356,9 +386,9 @@ namespace AntigravityTokenMonitor
                     _state.LastErrorMessage = string.Empty;
 
                     // 주간 리셋 주기 확인 및 새 주간 첫 토큰 소비 추적
-                    CheckWeeklyCycleAndFirstUsage(rem5h);
+                    CheckWeeklyCycleAndFirstUsage(rem5h, resetTimeStr);
 
-                    double remWk = CalculateEstimatedWeeklyPercent(rem5h);
+                    double remWk = CalculateEstimatedWeeklyPercent(rem5h, resetTimeStr);
                     _state.RemainingWeeklyPercent = remWk;
 
                     WriteUsageLog(rem5h, remWk, _state.RawJson);
@@ -367,14 +397,21 @@ namespace AntigravityTokenMonitor
                     _state.ConsumptionSpeed5h = speed5h;
 
                     double t5h;
+                    DateTime reset5hTarget;
                     double tWeekly;
-                    CalculateResetHours(resetTimeStr, out t5h, out tWeekly);
+                    DateTime resetWkTarget;
+                    CalculateResetHours(resetTimeStr, out t5h, out reset5hTarget, out tWeekly, out resetWkTarget);
                     _state.HoursUntil5HourReset = t5h;
                     _state.HoursUntilWeeklyReset = tWeekly;
 
+                    double active5h = CalculateActiveWorkingHours(DateTime.Now, reset5hTarget, _config.work_schedule);
+                    double activeWeekly = CalculateActiveWorkingHours(DateTime.Now, resetWkTarget, _config.work_schedule);
+                    _state.ActiveHoursUntil5HourReset = active5h;
+                    _state.ActiveHoursUntilWeeklyReset = activeWeekly;
+
                     double speedWk = _config.weekly_multiplier > 0 ? (speed5h / _config.weekly_multiplier) : speed5h;
-                    _state.Predicted5HourRemaining = Math.Max(0.0, rem5h - (speed5h * t5h));
-                    _state.PredictedWeeklyRemaining = Math.Max(0.0, remWk - (speedWk * tWeekly));
+                    _state.Predicted5HourRemaining = Math.Max(0.0, rem5h - (speed5h * active5h));
+                    _state.PredictedWeeklyRemaining = Math.Max(0.0, remWk - (speedWk * activeWeekly));
 
                     StatusLevel newStatus = DetermineStatus(speed5h, _state.Predicted5HourRemaining, _state.PredictedWeeklyRemaining);
                     if (_state.CurrentStatus != newStatus)
@@ -383,7 +420,7 @@ namespace AntigravityTokenMonitor
                     }
                     _state.CurrentStatus = newStatus;
 
-                    WriteSpeedLog(speed5h, t5h, _state.Predicted5HourRemaining, tWeekly, _state.PredictedWeeklyRemaining, newStatus);
+                    WriteSpeedLog(speed5h, t5h, active5h, _state.Predicted5HourRemaining, tWeekly, activeWeekly, _state.PredictedWeeklyRemaining, newStatus);
 
                     UpdateTrayUI();
 
@@ -414,33 +451,75 @@ namespace AntigravityTokenMonitor
             action.BeginInvoke(null, null);
         }
 
-        private static void CheckWeeklyCycleAndFirstUsage(double current5hRem)
+        private static DateTime GetLastWeeklyResetDateTime(DateTime now, string resetDayStr, string resetTimeStr)
+        {
+            DayOfWeek resetDay = DayOfWeek.Monday;
+            try { resetDay = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), resetDayStr, true); } catch { }
+
+            TimeSpan resetTime = TimeSpan.Zero;
+            TimeSpan.TryParse(resetTimeStr, out resetTime);
+
+            DateTime candidate = now.Date.Add(resetTime);
+            while (candidate.DayOfWeek != resetDay || candidate > now)
+            {
+                candidate = candidate.AddDays(-1);
+            }
+            return candidate;
+        }
+
+        private static void CheckWeeklyCycleAndFirstUsage(double current5hRem, string current5hResetStr)
         {
             try
             {
                 DateTime now = DateTime.Now;
-                DayOfWeek resetDay = DayOfWeek.Monday;
-                try { resetDay = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), _config.weekly_reset_day, true); } catch { }
-
-                // 현재 주간 사이클 ID (예: 2026-W35)
-                int weekNum = System.Globalization.CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(now, System.Globalization.CalendarWeekRule.FirstFourDayWeek, resetDay);
-                string currentCycleId = string.Format("{0}-W{1}", now.Year, weekNum);
+                DateTime lastResetDt = GetLastWeeklyResetDateTime(now, _config.weekly_reset_day, _config.weekly_reset_time);
+                string currentCycleId = lastResetDt.ToString("yyyy-MM-dd HH:mm");
 
                 if (_state.LastWeeklyResetId != currentCycleId)
                 {
                     _state.LastWeeklyResetId = currentCycleId;
+                    _state.RemainingWeeklyPercent = 100.0;
                     _state.WeeklyFirstActiveTimeStr = "아직 소비 없음 (리셋 대기)";
-                    WriteSystemLog("INFO", string.Format("새 주간 사이클 진입 ({0}): 주간 잔여량 100% 초기화", currentCycleId));
-                }
+                    _state.Baseline5hAtWeeklyReset = current5hRem;
 
-                // 주간 첫 토큰 소모 감지 (5h 잔여가 100% 미만으로 감소하는 첫 순간)
-                if (current5hRem < 99.9 && _state.WeeklyFirstActiveTimeStr.Contains("아직 소비 없음"))
+                    WeeklyCalibPoint anchorPoint = new WeeklyCalibPoint
+                    {
+                        ResetTime = current5hResetStr,
+                        FiveHourPercent = current5hRem,
+                        UserWeeklyPercent = 100.0,
+                        Timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
+                    };
+                    if (_calibHistory == null) _calibHistory = new List<WeeklyCalibPoint>();
+                    _calibHistory.Add(anchorPoint);
+                    SaveCalibHistory(_calibHistory);
+
+                    WriteSystemLog("INFO", string.Format("🎯 새 주간 사이클 진입 ({0}): 주간 잔여량 100% 초기화 및 기준점 설정 (5h 잔여: {1:F1}%)",
+                        currentCycleId, current5hRem));
+
+                    if (_config.sync_enabled)
+                    {
+                        SyncPushToServer();
+                    }
+                }
+                else
                 {
-                    _state.WeeklyFirstActiveTimeStr = now.ToString("yyyy-MM-dd HH:mm:ss");
-                    WriteSystemLog("INFO", string.Format("🎯 새 주간 첫 토큰 소비 감지! 시각: {0}, 5h 잔여: {1:F1}%", _state.WeeklyFirstActiveTimeStr, current5hRem));
+                    // 새 주간 첫 토큰 소모 감지
+                    if (_state.WeeklyFirstActiveTimeStr.Contains("아직 소비 없음"))
+                    {
+                        bool consumed = (_state.Baseline5hAtWeeklyReset - current5hRem) >= 0.3;
+                        if (consumed)
+                        {
+                            _state.WeeklyFirstActiveTimeStr = now.ToString("yyyy-MM-dd HH:mm:ss");
+                            WriteSystemLog("INFO", string.Format("🎯 새 주간 첫 토큰 소비 감지! 시각: {0}, 5h 잔여: {1:F1}% (리셋당시: {2:F1}%)",
+                                _state.WeeklyFirstActiveTimeStr, current5hRem, _state.Baseline5hAtWeeklyReset));
+                        }
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteSystemLog("WARN", "주간 사이클 확인 예외: " + ex.Message);
+            }
         }
 
         private static void TrimMemory()
@@ -666,19 +745,38 @@ namespace AntigravityTokenMonitor
             return 100.0;
         }
 
-        private static double CalculateEstimatedWeeklyPercent(double current5hRemPct)
+        private static double CalculateEstimatedWeeklyPercent(double current5hRemPct, string currentResetTimeStr)
         {
             double mult = _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
-            double consumed5h = Math.Max(0.0, 100.0 - current5hRemPct);
 
             if (_calibHistory != null && _calibHistory.Count > 0)
             {
                 WeeklyCalibPoint lastPoint = _calibHistory[_calibHistory.Count - 1];
+
+                // 5시간 세션이 변경되었을 때: 이전 세션까지 계산된 주간 잔여량을 기준으로 연속 기준점(Chained Anchor) 자동 생성
+                if (!string.IsNullOrEmpty(lastPoint.ResetTime) && !string.IsNullOrEmpty(currentResetTimeStr) && lastPoint.ResetTime != currentResetTimeStr)
+                {
+                    double currentWk = _state.RemainingWeeklyPercent;
+                    if (currentWk <= 0.0 || currentWk > 100.0) currentWk = 100.0;
+
+                    WeeklyCalibPoint chainedAnchor = new WeeklyCalibPoint
+                    {
+                        ResetTime = currentResetTimeStr,
+                        FiveHourPercent = current5hRemPct,
+                        UserWeeklyPercent = currentWk,
+                        Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                    };
+                    _calibHistory.Add(chainedAnchor);
+                    SaveCalibHistory(_calibHistory);
+                    lastPoint = chainedAnchor;
+                }
+
                 double delta5hSinceCalib = Math.Max(0.0, lastPoint.FiveHourPercent - current5hRemPct);
                 double deltaWkSinceCalib = delta5hSinceCalib / mult;
                 return Math.Max(0.0, Math.Min(100.0, lastPoint.UserWeeklyPercent - deltaWkSinceCalib));
             }
 
+            double consumed5h = Math.Max(0.0, 100.0 - current5hRemPct);
             return Math.Max(0.0, Math.Min(100.0, 100.0 - (consumed5h / mult)));
         }
 
@@ -764,7 +862,7 @@ namespace AntigravityTokenMonitor
 
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "GET";
-                req.UserAgent = "AntigravityTokenMonitor/3.3";
+                req.UserAgent = "AntigravityTokenMonitor/4.2";
                 req.KeepAlive = false;
                 req.ServicePoint.Expect100Continue = false;
                 req.Timeout = 3000;
@@ -872,7 +970,7 @@ namespace AntigravityTokenMonitor
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = httpMethod;
                 req.ContentType = "application/json";
-                req.UserAgent = "AntigravityTokenMonitor/3.3";
+                req.UserAgent = "AntigravityTokenMonitor/4.2";
                 req.KeepAlive = false;
                 req.ServicePoint.Expect100Continue = false;
                 req.ContentLength = bytes.Length;
@@ -985,11 +1083,12 @@ namespace AntigravityTokenMonitor
             return 0.0;
         }
 
-        private static void CalculateResetHours(string resetTimeIso, out double hours5h, out double hoursWeekly)
+        private static void CalculateResetHours(string resetTimeIso, out double hours5h, out DateTime reset5hTarget, out double hoursWeekly, out DateTime resetWkTarget)
         {
             DateTime now = DateTime.Now;
 
             hours5h = 5.0;
+            reset5hTarget = now.AddHours(5.0);
             if (!string.IsNullOrEmpty(resetTimeIso))
             {
                 try
@@ -998,6 +1097,7 @@ namespace AntigravityTokenMonitor
                     DateTime parsedLocal = parsedUtc.ToLocalTime();
                     if (parsedLocal > now)
                     {
+                        reset5hTarget = parsedLocal;
                         hours5h = Math.Max(0.05, (parsedLocal - now).TotalHours);
                     }
                 }
@@ -1019,7 +1119,54 @@ namespace AntigravityTokenMonitor
             {
                 nextWeekly = nextWeekly.AddDays(1);
             }
+            resetWkTarget = nextWeekly;
             hoursWeekly = Math.Max(0.1, (nextWeekly - now).TotalHours);
+        }
+
+        private static double CalculateActiveWorkingHours(DateTime start, DateTime end, Dictionary<string, string> schedule)
+        {
+            if (end <= start) return 0.0;
+            if (schedule == null || schedule.Count == 0)
+            {
+                return Math.Max(0.0, (end - start).TotalHours);
+            }
+
+            double totalActiveHours = 0.0;
+            DateTime curDate = start.Date;
+            DateTime endDate = end.Date;
+
+            while (curDate <= endDate)
+            {
+                string dayName = curDate.DayOfWeek.ToString();
+                if (schedule.ContainsKey(dayName))
+                {
+                    string timeRange = schedule[dayName];
+                    if (!string.IsNullOrWhiteSpace(timeRange) && !timeRange.Equals("off", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[] parts = timeRange.Split('-');
+                        if (parts.Length == 2)
+                        {
+                            TimeSpan workStart, workEnd;
+                            if (TimeSpan.TryParse(parts[0].Trim(), out workStart) && TimeSpan.TryParse(parts[1].Trim(), out workEnd))
+                            {
+                                DateTime workStartDt = curDate.Add(workStart);
+                                DateTime workEndDt = curDate.Add(workEnd);
+
+                                DateTime overlapStart = start > workStartDt ? start : workStartDt;
+                                DateTime overlapEnd = end < workEndDt ? end : workEndDt;
+
+                                if (overlapEnd > overlapStart)
+                                {
+                                    totalActiveHours += (overlapEnd - overlapStart).TotalHours;
+                                }
+                            }
+                        }
+                    }
+                }
+                curDate = curDate.AddDays(1);
+            }
+
+            return Math.Max(0.0, totalActiveHours);
         }
 
         private static StatusLevel DetermineStatus(double speed5h, double pred5h, double predWeekly)
@@ -1043,7 +1190,7 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v4.0";
+            _notifyIcon.Text = "Antigravity Token Monitor v4.2";
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
@@ -1184,7 +1331,7 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v4.0 - 실시간 현황",
+                Text = "Antigravity Token Monitor v4.2 - 실시간 현황",
                 Size = new Size(640, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
@@ -1209,34 +1356,34 @@ namespace AntigravityTokenMonitor
             {
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v4.0 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v4.2 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
                     "  클라우드동기화: {2}\r\n" +
                     "\r\n" +
                     "-- 5시간 및 주간 쿼터 현황 ---------------------------\r\n" +
-                    "  5시간 실측  : {3:F1} %  (공식 리셋: {4:F1}시간 남음, {5})\r\n" +
+                    "  5시간 실측  : {3:F1} %  (공식 리셋: {4:F1}h 후, 실근무: {5:F1}h)\r\n" +
                     "  주간 잔여량 : {6:F1} %  (주간/일간 배율: {7:F1}배 적용 중)\r\n" +
                     "  5시간 소모속도 : {8:F2} %/h\r\n" +
                     "  새 주간 첫소비 : {9}\r\n" +
                     "\r\n" +
-                    "-- 초기화 시점 예측 잔여량 ---------------------------\r\n" +
+                    "-- 초기화 시점 예측 잔여량 (실근무 활동 기준) ---------\r\n" +
                     "  5시간 리셋시점 예측: {10:F2} %\r\n" +
-                    "  주간  리셋시점 예측: {11:F2} %  ({12}시간 후, {13} {14})\r\n" +
+                    "  주간  리셋시점 예측: {11:F2} %  (전체 {12}h 후, 실근무 {13:F1}h 남음, {14} {15})\r\n" +
                     "\r\n" +
                     "-- 상태 판정 기준 ------------------------------------\r\n" +
                     "  🔴 위험: 리셋 시점 잔여량 <= 15%\r\n" +
                     "  🟠 경고: 5h 속도 >= 20%/h OR 리셋 시점 잔여량 <= 25%\r\n" +
                     "  🟢 정상: 안정 범위\r\n" +
                     "======================================================\r\n" +
-                    "{15}",
+                    "{16}",
                     _state.LastCheckTime > DateTime.MinValue ? _state.LastCheckTime.ToString("yyyy-MM-dd HH:mm:ss") : "조회 중...",
                     _state.CurrentStatus,
                     _config.sync_enabled ? "🟢 활성화 (" + _config.sync_url + ")" : "⚪ 비활성화 (로컬 단독 모드)",
                     _state.Remaining5HourPercent,
                     _state.HoursUntil5HourReset,
-                    string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr,
+                    _state.ActiveHoursUntil5HourReset,
                     _state.RemainingWeeklyPercent,
                     _config.weekly_multiplier,
                     _state.ConsumptionSpeed5h,
@@ -1244,6 +1391,7 @@ namespace AntigravityTokenMonitor
                     _state.Predicted5HourRemaining,
                     _state.PredictedWeeklyRemaining,
                     _state.HoursUntilWeeklyReset.ToString("F1"),
+                    _state.ActiveHoursUntilWeeklyReset,
                     _config.weekly_reset_day,
                     _config.weekly_reset_time,
                     string.IsNullOrEmpty(_state.LastErrorMessage) ? "" : "\r\n[최근 오류]\r\n" + _state.LastErrorMessage
@@ -1319,7 +1467,7 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v4.0)",
+                Text = "주간 쿼터 설정 & 배율 보정 (v4.2)",
                 Size = new Size(520, 560),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,

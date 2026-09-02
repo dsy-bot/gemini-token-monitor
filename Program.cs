@@ -30,6 +30,13 @@ namespace AntigravityTokenMonitor
         Error
     }
 
+    public class ThresholdConfig
+    {
+        public double speed_5h { get; set; }
+        public double predicted_5h { get; set; }
+        public double predicted_wk { get; set; }
+    }
+
     public class AppConfig
     {
         public int interval_minutes { get; set; }
@@ -40,6 +47,8 @@ namespace AntigravityTokenMonitor
         public string sync_url { get; set; }
         public string sync_api_key { get; set; }
         public Dictionary<string, string> work_schedule { get; set; }
+        public ThresholdConfig threshold_danger { get; set; }
+        public ThresholdConfig threshold_warning { get; set; }
 
         public AppConfig()
         {
@@ -60,6 +69,8 @@ namespace AntigravityTokenMonitor
                 { "Saturday", "off" },
                 { "Sunday", "off" }
             };
+            threshold_danger = new ThresholdConfig { speed_5h = 40.0, predicted_5h = 0.0, predicted_wk = 0.0 };
+            threshold_warning = new ThresholdConfig { speed_5h = 20.0, predicted_5h = 15.0, predicted_wk = 10.0 };
         }
     }
 
@@ -82,11 +93,19 @@ namespace AntigravityTokenMonitor
         public double HoursUntilWeeklyReset { get; set; }
         public double ActiveHoursUntil5HourReset { get; set; }
         public double ActiveHoursUntilWeeklyReset { get; set; }
+        public double ActiveHoursUntilDayEnd { get; set; }
         public string ResetTime5HourStr { get; set; }
         public StatusLevel CurrentStatus { get; set; }
         public DateTime LastCheckTime { get; set; }
         public string LastErrorMessage { get; set; }
         public string RawJson { get; set; }
+
+        public string FiveHourFirstActiveTimeStr { get; set; }
+        public string Last5HourResetId { get; set; }
+        public double LastValidConsumptionSpeed5h { get; set; }
+        public string LastDailyDate { get; set; }
+        public double DailyCumulativeWeeklyConsumed { get; set; }
+        public double DailyEstimatedWeeklyConsumption { get; set; }
 
         public string LastWeeklyResetId { get; set; }
         public string WeeklyFirstActiveTimeStr { get; set; }
@@ -106,11 +125,18 @@ namespace AntigravityTokenMonitor
             HoursUntilWeeklyReset = 168.0;
             ActiveHoursUntil5HourReset = 5.0;
             ActiveHoursUntilWeeklyReset = 45.0;
+            ActiveHoursUntilDayEnd = 0.0;
             ResetTime5HourStr = string.Empty;
             CurrentStatus = StatusLevel.Normal;
             LastCheckTime = DateTime.MinValue;
             LastErrorMessage = string.Empty;
             RawJson = string.Empty;
+            FiveHourFirstActiveTimeStr = "기록 없음 (완충 상태)";
+            Last5HourResetId = string.Empty;
+            LastValidConsumptionSpeed5h = 0.0;
+            LastDailyDate = string.Empty;
+            DailyCumulativeWeeklyConsumed = 0.0;
+            DailyEstimatedWeeklyConsumption = 0.0;
             LastWeeklyResetId = string.Empty;
             WeeklyFirstActiveTimeStr = "기록 없음";
             Baseline5hAtWeeklyReset = 100.0;
@@ -148,6 +174,15 @@ namespace AntigravityTokenMonitor
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e)
+            {
+                WriteSystemLog("FATAL", "UnhandledException: " + e.ExceptionObject);
+            };
+            Application.ThreadException += delegate(object sender, System.Threading.ThreadExceptionEventArgs e)
+            {
+                WriteSystemLog("FATAL", "ThreadException: " + e.Exception);
+            };
+
             ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
             try
             {
@@ -169,7 +204,7 @@ namespace AntigravityTokenMonitor
             _calibHistory = LoadCalibHistory();
             _state = LoadState();
 
-            WriteSystemLog("INFO", "Antigravity Token Monitor v4.3 시작");
+            WriteSystemLog("INFO", "Antigravity Token Monitor v4.6 시작");
 
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
@@ -222,6 +257,14 @@ namespace AntigravityTokenMonitor
                                 { "Saturday", "off" },
                                 { "Sunday", "off" }
                             };
+                        }
+                        if (cfg.threshold_danger == null)
+                        {
+                            cfg.threshold_danger = new ThresholdConfig { speed_5h = 40.0, predicted_5h = 0.0, predicted_wk = 0.0 };
+                        }
+                        if (cfg.threshold_warning == null)
+                        {
+                            cfg.threshold_warning = new ThresholdConfig { speed_5h = 20.0, predicted_5h = 15.0, predicted_wk = 10.0 };
                         }
                         return cfg;
                     }
@@ -327,6 +370,20 @@ namespace AntigravityTokenMonitor
                         s.RemainingWeeklyPercent = Convert.ToDouble(dict["remaining_weekly_percent"]);
                     if (dict.ContainsKey("weekly_first_active_time") && dict["weekly_first_active_time"] != null)
                         s.WeeklyFirstActiveTimeStr = Convert.ToString(dict["weekly_first_active_time"]);
+
+                    if (dict.ContainsKey("five_hour_first_active_time") && dict["five_hour_first_active_time"] != null)
+                        s.FiveHourFirstActiveTimeStr = Convert.ToString(dict["five_hour_first_active_time"]);
+                    if (dict.ContainsKey("last_5h_reset_id") && dict["last_5h_reset_id"] != null)
+                        s.Last5HourResetId = Convert.ToString(dict["last_5h_reset_id"]);
+                    if (dict.ContainsKey("last_valid_consumption_speed_5h") && dict["last_valid_consumption_speed_5h"] != null)
+                        s.LastValidConsumptionSpeed5h = Convert.ToDouble(dict["last_valid_consumption_speed_5h"]);
+                    if (dict.ContainsKey("last_daily_date") && dict["last_daily_date"] != null)
+                        s.LastDailyDate = Convert.ToString(dict["last_daily_date"]);
+                    if (dict.ContainsKey("daily_cumulative_weekly_consumed") && dict["daily_cumulative_weekly_consumed"] != null)
+                        s.DailyCumulativeWeeklyConsumed = Convert.ToDouble(dict["daily_cumulative_weekly_consumed"]);
+                    if (dict.ContainsKey("daily_estimated_weekly_consumption") && dict["daily_estimated_weekly_consumption"] != null)
+                        s.DailyEstimatedWeeklyConsumption = Convert.ToDouble(dict["daily_estimated_weekly_consumption"]);
+
                     return s;
                 }
             }
@@ -346,7 +403,13 @@ namespace AntigravityTokenMonitor
                     { "last_tracked_5h_reset_time", _state.LastTracked5HourResetTime },
                     { "weekly_cumulative_5h_consumed", _state.WeeklyCumulative5hConsumed },
                     { "remaining_weekly_percent", _state.RemainingWeeklyPercent },
-                    { "weekly_first_active_time", _state.WeeklyFirstActiveTimeStr }
+                    { "weekly_first_active_time", _state.WeeklyFirstActiveTimeStr },
+                    { "five_hour_first_active_time", _state.FiveHourFirstActiveTimeStr },
+                    { "last_5h_reset_id", _state.Last5HourResetId },
+                    { "last_valid_consumption_speed_5h", _state.LastValidConsumptionSpeed5h },
+                    { "last_daily_date", _state.LastDailyDate },
+                    { "daily_cumulative_weekly_consumed", _state.DailyCumulativeWeeklyConsumed },
+                    { "daily_estimated_weekly_consumption", _state.DailyEstimatedWeeklyConsumption }
                 };
                 string json = _jsonSerializer.Serialize(dict);
                 File.WriteAllText(Path.Combine(_configDir, "state.json"), json, System.Text.Encoding.UTF8);
@@ -441,6 +504,21 @@ namespace AntigravityTokenMonitor
                     // 주간 리셋 주기 확인 및 새 주간 첫 토큰 소비 추적
                     CheckWeeklyCycleAndFirstUsage(rem5h, resetTimeStr);
 
+                    // 5시간 리셋 주기 확인 및 새 5시간 세션 첫 토큰 소비 추적
+                    if (!string.IsNullOrEmpty(resetTimeStr) && _state.Last5HourResetId != resetTimeStr)
+                    {
+                        _state.Last5HourResetId = resetTimeStr;
+                        _state.FiveHourFirstActiveTimeStr = "기록 없음 (완충 상태)";
+                    }
+
+                    // 일일 누적 소비 날짜 갱신 확인 (자정 기준 초기화)
+                    string todayStr = DateTime.Now.ToString("yyyy-MM-dd");
+                    if (_state.LastDailyDate != todayStr)
+                    {
+                        _state.LastDailyDate = todayStr;
+                        _state.DailyCumulativeWeeklyConsumed = 0.0;
+                    }
+
                     // 5시간 실소모량 누적 합산 및 주간 잔여량 차감
                     double mult = _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
                     if (_state.LastTracked5HourPercent > 0 && !string.IsNullOrEmpty(_state.LastTracked5HourResetTime) && _state.LastTracked5HourResetTime == resetTimeStr)
@@ -449,19 +527,36 @@ namespace AntigravityTokenMonitor
                         if (delta5h > 0.001)
                         {
                             _state.WeeklyCumulative5hConsumed += delta5h;
-                            _state.RemainingWeeklyPercent = Math.Max(0.0, Math.Min(100.0, _state.RemainingWeeklyPercent - (delta5h / mult)));
+                            double deltaWk = delta5h / mult;
+                            _state.RemainingWeeklyPercent = Math.Max(0.0, Math.Min(100.0, _state.RemainingWeeklyPercent - deltaWk));
+                            _state.DailyCumulativeWeeklyConsumed += deltaWk;
+
+                            if (_state.FiveHourFirstActiveTimeStr.StartsWith("기록 없음"))
+                            {
+                                _state.FiveHourFirstActiveTimeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                            }
                         }
                     }
+
+                    if (_state.FiveHourFirstActiveTimeStr.StartsWith("기록 없음") && rem5h < 99.9)
+                    {
+                        _state.FiveHourFirstActiveTimeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                    }
+
                     _state.LastTracked5HourPercent = rem5h;
                     _state.LastTracked5HourResetTime = resetTimeStr;
+
+                    double speed5h = Calculate5HourConsumptionSpeed(rem5h);
+                    _state.ConsumptionSpeed5h = speed5h;
+
+                    double todayWorkHours = GetTodayTotalWorkHours();
+                    _state.DailyEstimatedWeeklyConsumption = Math.Round((speed5h / mult) * todayWorkHours, 2);
+
                     SaveState();
 
                     double remWk = _state.RemainingWeeklyPercent;
 
                     WriteUsageLog(rem5h, remWk, _state.RawJson);
-
-                    double speed5h = Calculate5HourConsumptionSpeed(rem5h);
-                    _state.ConsumptionSpeed5h = speed5h;
 
                     double t5h;
                     DateTime reset5hTarget;
@@ -475,10 +570,11 @@ namespace AntigravityTokenMonitor
                     double activeWeekly = CalculateActiveWorkingHours(DateTime.Now, resetWkTarget, _config.work_schedule);
                     _state.ActiveHoursUntil5HourReset = active5h;
                     _state.ActiveHoursUntilWeeklyReset = activeWeekly;
+                    _state.ActiveHoursUntilDayEnd = GetActiveHoursUntilTodayEnd();
 
-                    double speedWk = _config.weekly_multiplier > 0 ? (speed5h / _config.weekly_multiplier) : speed5h;
-                    _state.Predicted5HourRemaining = Math.Max(0.0, rem5h - (speed5h * active5h));
-                    _state.PredictedWeeklyRemaining = Math.Max(0.0, remWk - (speedWk * activeWeekly));
+                    double speedWk = mult > 0 ? (speed5h / mult) : speed5h;
+                    _state.Predicted5HourRemaining = rem5h - (speed5h * active5h);
+                    _state.PredictedWeeklyRemaining = remWk - (speedWk * activeWeekly);
 
                     StatusLevel newStatus = DetermineStatus(speed5h, _state.Predicted5HourRemaining, _state.PredictedWeeklyRemaining);
                     if (_state.CurrentStatus != newStatus)
@@ -1182,19 +1278,47 @@ namespace AntigravityTokenMonitor
                     }
                 }
 
-                if (points.Count >= 2)
+                // 시간 순서대로 정렬 보장
+                points.Sort(delegate(UsageLogPoint a, UsageLogPoint b) { return a.Timestamp.CompareTo(b.Timestamp); });
+
+                // 세션 경계(리셋 점프) 탐색: 최신에서 과거로 탐색하여 직전 5시간 리셋 지점(잔여량이 10% 이상 갑자기 증가한 지점) 이전의 과거 세션 데이터 배제
+                List<UsageLogPoint> currentSessionPoints = new List<UsageLogPoint>();
+                if (points.Count > 0)
                 {
-                    UsageLogPoint oldest = points[0];
-                    UsageLogPoint newest = points[points.Count - 1];
-                    double elapsedHours = (newest.Timestamp - oldest.Timestamp).TotalHours;
-                    if (elapsedHours >= 0.05)
+                    for (int i = points.Count - 1; i >= 0; i--)
                     {
-                        double deltaConsumed = oldest.RemainingPercent - newest.RemainingPercent;
-                        if (deltaConsumed > 0)
+                        currentSessionPoints.Insert(0, points[i]);
+                        if (i > 0)
                         {
-                            return deltaConsumed / elapsedHours;
+                            if (points[i].RemainingPercent - points[i - 1].RemainingPercent > 10.0)
+                            {
+                                break;
+                            }
                         }
                     }
+                }
+
+                if (currentSessionPoints.Count >= 2)
+                {
+                    UsageLogPoint oldest = currentSessionPoints[0];
+                    UsageLogPoint newest = currentSessionPoints[currentSessionPoints.Count - 1];
+                    double elapsedHours = (newest.Timestamp - oldest.Timestamp).TotalHours;
+                    if (elapsedHours >= 0.08)
+                    {
+                        double deltaConsumed = oldest.RemainingPercent - newest.RemainingPercent;
+                        if (deltaConsumed > 0.001)
+                        {
+                            double speed = Math.Round(deltaConsumed / elapsedHours, 2);
+                            _state.LastValidConsumptionSpeed5h = speed;
+                            return speed;
+                        }
+                    }
+                }
+
+                // 리셋 직후 데이터 부족 또는 소비 시작 전: 이전 세션 유효 속도 승계/보존
+                if (_state.LastValidConsumptionSpeed5h > 0.0)
+                {
+                    return _state.LastValidConsumptionSpeed5h;
                 }
             }
             catch (Exception ex)
@@ -1242,6 +1366,46 @@ namespace AntigravityTokenMonitor
             }
             resetWkTarget = nextWeekly;
             hoursWeekly = Math.Max(0.1, (nextWeekly - now).TotalHours);
+        }
+
+        private static double GetActiveHoursUntilTodayEnd()
+        {
+            DateTime now = DateTime.Now;
+            string todayStr = now.DayOfWeek.ToString();
+            if (_config.work_schedule == null || !_config.work_schedule.ContainsKey(todayStr)) return 0.0;
+            
+            string sched = _config.work_schedule[todayStr];
+            if (string.IsNullOrWhiteSpace(sched) || sched.Equals("off", StringComparison.OrdinalIgnoreCase)) return 0.0;
+
+            string[] parts = sched.Split('-');
+            if (parts.Length != 2) return 0.0;
+            
+            TimeSpan start, end;
+            if (!TimeSpan.TryParse(parts[0].Trim(), out start) || !TimeSpan.TryParse(parts[1].Trim(), out end)) return 0.0;
+
+            TimeSpan currentTime = now.TimeOfDay;
+            if (currentTime >= end) return 0.0;
+            if (currentTime < start) return (end - start).TotalHours;
+
+            return (end - currentTime).TotalHours;
+        }
+
+        private static double GetTodayTotalWorkHours()
+        {
+            DateTime now = DateTime.Now;
+            string todayStr = now.DayOfWeek.ToString();
+            if (_config.work_schedule == null || !_config.work_schedule.ContainsKey(todayStr)) return 9.0;
+            
+            string sched = _config.work_schedule[todayStr];
+            if (string.IsNullOrWhiteSpace(sched) || sched.Equals("off", StringComparison.OrdinalIgnoreCase)) return 0.0;
+
+            string[] parts = sched.Split('-');
+            if (parts.Length != 2) return 9.0;
+            
+            TimeSpan start, end;
+            if (!TimeSpan.TryParse(parts[0].Trim(), out start) || !TimeSpan.TryParse(parts[1].Trim(), out end)) return 9.0;
+
+            return Math.Max(0.0, (end - start).TotalHours);
         }
 
         private static double CalculateActiveWorkingHours(DateTime start, DateTime end, Dictionary<string, string> schedule)
@@ -1292,14 +1456,15 @@ namespace AntigravityTokenMonitor
 
         private static StatusLevel DetermineStatus(double speed5h, double pred5h, double predWeekly)
         {
-            double minPred = Math.Min(pred5h, predWeekly);
+            var td = _config.threshold_danger ?? new ThresholdConfig { speed_5h = 40.0, predicted_5h = 0.0, predicted_wk = 0.0 };
+            var tw = _config.threshold_warning ?? new ThresholdConfig { speed_5h = 20.0, predicted_5h = 15.0, predicted_wk = 10.0 };
 
-            if (minPred <= 15.0)
+            if (speed5h >= td.speed_5h || pred5h <= td.predicted_5h || predWeekly <= td.predicted_wk)
             {
                 return StatusLevel.Danger;
             }
 
-            if (speed5h >= 20.0 || minPred <= 25.0)
+            if (speed5h >= tw.speed_5h || pred5h <= tw.predicted_5h || predWeekly <= tw.predicted_wk)
             {
                 return StatusLevel.Warning;
             }
@@ -1311,9 +1476,10 @@ namespace AntigravityTokenMonitor
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "Antigravity Token Monitor v4.3";
+            _notifyIcon.Text = "Antigravity Token Monitor v4.6";
 
             ContextMenuStrip menu = new ContextMenuStrip();
+            IntPtr forceHandle = menu.Handle; // UI 스레드에서 윈도우 핸들 강제 생성
             ToolStripMenuItem itemStatus = new ToolStripMenuItem("📊 실시간 현황 (Status)");
             itemStatus.Font = new Font("맑은 고딕", 9, FontStyle.Bold);
             itemStatus.Click += delegate(object sender, EventArgs e) { ShowStatusDialog(); };
@@ -1452,8 +1618,8 @@ namespace AntigravityTokenMonitor
         {
             Form form = new Form
             {
-                Text = "Antigravity Token Monitor v4.3 - 실시간 현황",
-                Size = new Size(640, 560),
+                Text = "Antigravity Token Monitor v4.6 - 실시간 현황",
+                ClientSize = new Size(640, 580),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedSingle,
                 MaximizeBox = false,
@@ -1470,32 +1636,43 @@ namespace AntigravityTokenMonitor
                 BackColor = Color.FromArgb(30, 33, 40),
                 ForeColor = Color.FromArgb(220, 230, 240),
                 Location = new Point(12, 12),
-                Size = new Size(600, 460)
+                Size = new Size(616, 508)
             };
 
             Action refreshText = delegate
             {
+                double mult = _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
+                double speedWk = mult > 0 ? (_state.ConsumptionSpeed5h / mult) : _state.ConsumptionSpeed5h;
+                double todayWorkHours = GetTodayTotalWorkHours();
+
+                var td = _config.threshold_danger ?? new ThresholdConfig { speed_5h = 40.0, predicted_5h = 0.0, predicted_wk = 0.0 };
+                var tw = _config.threshold_warning ?? new ThresholdConfig { speed_5h = 20.0, predicted_5h = 15.0, predicted_wk = 10.0 };
+
                 string statusText = string.Format(
                     "======================================================\r\n" +
-                    "   Antigravity Token Monitor v4.3 - 실시간 모니터링\r\n" +
+                    "   Antigravity Token Monitor v4.6 - 실시간 모니터링\r\n" +
                     "======================================================\r\n" +
                     "  조회 시각   : {0}\r\n" +
                     "  상태 판별   : [{1}]\r\n" +
                     "  클라우드동기화: {2}\r\n" +
                     "\r\n" +
                     "-- 5시간 및 주간 쿼터 현황 ---------------------------\r\n" +
-                    "  5시간 실측  : {3:F1} %  (공식 리셋: {4:F1}h 후, 실근무: {5:F1}h)\r\n" +
-                    "  주간 잔여량 : {6:F1} %  (주간/일간 배율: {7:F1}배 적용 중)\r\n" +
-                    "  5시간 소모속도 : {8:F2} %/h\r\n" +
-                    "  새 주간 첫소비 : {9}\r\n" +
+                    "  5시간 실측    : {3:F1} %  (공식 리셋: {4:F1}h 후, 5h 실근무: {5:F1}h)\r\n" +
+                    "  [-] 5시간 첫소비 : {17}\r\n" +
+                    "  [-] 금일 잔여 실근무 : {18:F1} h (오늘 퇴근까지)\r\n" +
+                    "  주간 잔여량   : {6:F1} %  (주간/일간 배율: {7:F1}배 적용 중)\r\n" +
+                    "  5시간 소모속도: {8:F2} %/h\r\n" +
+                    "  주간 소모속도 : {19:F2} %/h\r\n" +
+                    "  하루 주간 소모: 오늘 실소모 {20:F1} %  |  일일 예상 {21:F1} %/day ({22:F1}h근무 기준)\r\n" +
+                    "  새 주간 첫소비: {9}\r\n" +
                     "\r\n" +
                     "-- 초기화 시점 예측 잔여량 (실근무 활동 기준) ---------\r\n" +
                     "  5시간 리셋시점 예측: {10:F2} %\r\n" +
-                    "  주간  리셋시점 예측: {11:F2} %  (전체 {12}h 후, 실근무 {13:F1}h 남음, {14} {15})\r\n" +
+                    "  주간  리셋시점 예측: {11:F2} %  (전체 {12}h 후, 1w 실근무 {13:F1}h 남음, {14} {15})\r\n" +
                     "\r\n" +
-                    "-- 상태 판정 기준 ------------------------------------\r\n" +
-                    "  🔴 위험: 리셋 시점 잔여량 <= 15%\r\n" +
-                    "  🟠 경고: 5h 속도 >= 20%/h OR 리셋 시점 잔여량 <= 25%\r\n" +
+                    "-- 상태 판정 기준 (config.json 설정값) ---------------\r\n" +
+                    "  🔴 위험: 5h속도 >= {23:F1}%/h OR 5h예측 <= {24:F1}% OR 1w예측 <= {25:F1}%\r\n" +
+                    "  🟠 경고: 5h속도 >= {26:F1}%/h OR 5h예측 <= {27:F1}% OR 1w예측 <= {28:F1}%\r\n" +
                     "  🟢 정상: 안정 범위\r\n" +
                     "======================================================\r\n" +
                     "{16}",
@@ -1515,7 +1692,19 @@ namespace AntigravityTokenMonitor
                     _state.ActiveHoursUntilWeeklyReset,
                     _config.weekly_reset_day,
                     _config.weekly_reset_time,
-                    string.IsNullOrEmpty(_state.LastErrorMessage) ? "" : "\r\n[최근 오류]\r\n" + _state.LastErrorMessage
+                    string.IsNullOrEmpty(_state.LastErrorMessage) ? "" : "\r\n[최근 오류]\r\n" + _state.LastErrorMessage,
+                    _state.FiveHourFirstActiveTimeStr,
+                    _state.ActiveHoursUntilDayEnd,
+                    speedWk,
+                    _state.DailyCumulativeWeeklyConsumed,
+                    _state.DailyEstimatedWeeklyConsumption,
+                    todayWorkHours,
+                    td.speed_5h,
+                    td.predicted_5h,
+                    td.predicted_wk,
+                    tw.speed_5h,
+                    tw.predicted_5h,
+                    tw.predicted_wk
                 );
 
                 tb.Text = statusText;
@@ -1527,11 +1716,12 @@ namespace AntigravityTokenMonitor
             Button btnRefresh = new Button
             {
                 Text = "지금 갱신",
-                Location = new Point(12, 480),
-                Size = new Size(110, 30),
+                Location = new Point(12, 532),
+                Size = new Size(115, 34),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
-                BackColor = Color.FromArgb(52, 152, 219)
+                BackColor = Color.FromArgb(52, 152, 219),
+                Font = new Font("맑은 고딕", 9f, FontStyle.Bold)
             };
             btnRefresh.Click += delegate(object sender, EventArgs e)
             {
@@ -1559,11 +1749,12 @@ namespace AntigravityTokenMonitor
             Button btnCalib = new Button
             {
                 Text = "주간 % 보정",
-                Location = new Point(130, 480),
-                Size = new Size(110, 30),
+                Location = new Point(135, 532),
+                Size = new Size(115, 34),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
-                BackColor = Color.FromArgb(46, 204, 113)
+                BackColor = Color.FromArgb(46, 204, 113),
+                Font = new Font("맑은 고딕", 9f, FontStyle.Bold)
             };
             btnCalib.Click += delegate(object sender, EventArgs e) { ShowWeeklyCalibrationDialog(); refreshText(); };
             form.Controls.Add(btnCalib);
@@ -1571,11 +1762,12 @@ namespace AntigravityTokenMonitor
             Button btnClose = new Button
             {
                 Text = "닫기",
-                Location = new Point(522, 480),
-                Size = new Size(90, 30),
+                Location = new Point(513, 532),
+                Size = new Size(115, 34),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
-                BackColor = Color.FromArgb(100, 100, 100)
+                BackColor = Color.FromArgb(100, 100, 100),
+                Font = new Font("맑은 고딕", 9f)
             };
             btnClose.Click += delegate(object sender, EventArgs e) { form.Close(); };
             form.Controls.Add(btnClose);
@@ -1588,8 +1780,8 @@ namespace AntigravityTokenMonitor
         {
             Form f = new Form
             {
-                Text = "주간 쿼터 설정 & 배율 보정 (v4.3)",
-                Size = new Size(520, 560),
+                Text = "주간 쿼터 설정 & 배율 보정 (v4.6)",
+                ClientSize = new Size(520, 580),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
@@ -1602,7 +1794,7 @@ namespace AntigravityTokenMonitor
             {
                 Text = "🎯 [기능 1] 주간 잔여 % 보정 & 배율 수동/자동 조절",
                 Location = new Point(15, 15),
-                Size = new Size(475, 230),
+                Size = new Size(490, 245),
                 ForeColor = Color.FromArgb(255, 200, 100),
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Bold)
             };
@@ -1611,8 +1803,8 @@ namespace AntigravityTokenMonitor
             {
                 Text = string.Format("공식 웹에서 확인한 [현재 주간 잔여 %]를 입력하세요.\r\n(5h 실측: {0:F1}%, 리셋: {1})\r\n※ 동일 5시간 세션 내에서 2회 이상 입력 시 배율이 자동 조절됩니다.",
                     _state.Remaining5HourPercent, string.IsNullOrEmpty(_state.ResetTime5HourStr) ? "대기중" : _state.ResetTime5HourStr),
-                Location = new Point(15, 25),
-                Size = new Size(445, 55),
+                Location = new Point(15, 22),
+                Size = new Size(460, 45),
                 ForeColor = Color.FromArgb(220, 230, 240),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
             };
@@ -1621,8 +1813,8 @@ namespace AntigravityTokenMonitor
             Label lblInput = new Label
             {
                 Text = "주간 잔여 %:",
-                Location = new Point(15, 88),
-                Size = new Size(95, 25),
+                Location = new Point(15, 76),
+                Size = new Size(95, 23),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1630,7 +1822,7 @@ namespace AntigravityTokenMonitor
 
             TextBox txtWk = new TextBox
             {
-                Location = new Point(115, 86),
+                Location = new Point(115, 73),
                 Size = new Size(70, 25),
                 Font = new Font("Consolas", 10),
                 Text = _state.RemainingWeeklyPercent.ToString("F1")
@@ -1640,8 +1832,8 @@ namespace AntigravityTokenMonitor
             Label lblUnit = new Label
             {
                 Text = "%",
-                Location = new Point(190, 88),
-                Size = new Size(20, 25),
+                Location = new Point(190, 76),
+                Size = new Size(20, 23),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1650,8 +1842,8 @@ namespace AntigravityTokenMonitor
             Button btnForceSave = new Button
             {
                 Text = "주간 % 단순보정 (배율고정)",
-                Location = new Point(215, 68),
-                Size = new Size(245, 28),
+                Location = new Point(220, 71),
+                Size = new Size(255, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(46, 204, 113),
@@ -1676,8 +1868,8 @@ namespace AntigravityTokenMonitor
             Button btnAutoLearn = new Button
             {
                 Text = "주간 % 입력 및 배율 자동학습",
-                Location = new Point(215, 100),
-                Size = new Size(245, 28),
+                Location = new Point(220, 107),
+                Size = new Size(255, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(52, 152, 219),
@@ -1695,7 +1887,7 @@ namespace AntigravityTokenMonitor
                     // 배율 텍스트박스 업데이트
                     foreach (Control c in gbCalib.Controls)
                     {
-                        if (c is TextBox && c.Location.Y > 120) { c.Text = _config.weekly_multiplier.ToString("F1"); }
+                        if (c is TextBox && c.Location.Y > 140) { c.Text = _config.weekly_multiplier.ToString("F1"); }
                     }
                 }
                 else
@@ -1709,8 +1901,8 @@ namespace AntigravityTokenMonitor
             Label lblMult = new Label
             {
                 Text = "적용 배율:",
-                Location = new Point(15, 135),
-                Size = new Size(95, 25),
+                Location = new Point(15, 149),
+                Size = new Size(95, 23),
                 ForeColor = Color.FromArgb(200, 220, 255),
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1718,7 +1910,7 @@ namespace AntigravityTokenMonitor
 
             TextBox txtMult = new TextBox
             {
-                Location = new Point(115, 133),
+                Location = new Point(115, 147),
                 Size = new Size(70, 25),
                 Font = new Font("Consolas", 10),
                 Text = _config.weekly_multiplier.ToString("F1")
@@ -1728,8 +1920,8 @@ namespace AntigravityTokenMonitor
             Label lblMultUnit = new Label
             {
                 Text = "배",
-                Location = new Point(190, 135),
-                Size = new Size(25, 25),
+                Location = new Point(190, 149),
+                Size = new Size(25, 23),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
             };
@@ -1738,8 +1930,8 @@ namespace AntigravityTokenMonitor
             Button btnSaveMult = new Button
             {
                 Text = "배율 직접 적용",
-                Location = new Point(220, 130),
-                Size = new Size(130, 30),
+                Location = new Point(220, 145),
+                Size = new Size(255, 30),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(52, 152, 219),
@@ -1766,8 +1958,8 @@ namespace AntigravityTokenMonitor
             Label lblCycleInfo = new Label
             {
                 Text = string.Format("🌱 이번 주 첫 토큰 소비 시점: {0}", _state.WeeklyFirstActiveTimeStr),
-                Location = new Point(15, 185),
-                Size = new Size(445, 25),
+                Location = new Point(15, 195),
+                Size = new Size(460, 25),
                 ForeColor = Color.FromArgb(150, 230, 150),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
             };
@@ -1779,8 +1971,8 @@ namespace AntigravityTokenMonitor
             GroupBox gbTime = new GroupBox
             {
                 Text = "⏰ [기능 2] 주간 리셋 시간 간편 맞춤 (남은 시간 입력)",
-                Location = new Point(15, 255),
-                Size = new Size(475, 200),
+                Location = new Point(15, 270),
+                Size = new Size(490, 230),
                 ForeColor = Color.FromArgb(100, 200, 255),
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Bold)
             };
@@ -1789,7 +1981,7 @@ namespace AntigravityTokenMonitor
             {
                 Text = "웹 UI에 표시된 [주간 쿼터 남은 시간]을 입력하면\r\n초기화 요일과 시각을 자동 계산하여 config에 저장합니다.",
                 Location = new Point(15, 25),
-                Size = new Size(445, 40),
+                Size = new Size(460, 40),
                 ForeColor = Color.FromArgb(220, 230, 240),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
             };
@@ -1800,18 +1992,18 @@ namespace AntigravityTokenMonitor
                 Text = string.Format("현재 설정: 매주 {0} {1} (리셋까지 약 {2:F1}시간 남음)",
                     _config.weekly_reset_day, _config.weekly_reset_time, _state.HoursUntilWeeklyReset),
                 Location = new Point(15, 70),
-                Size = new Size(445, 25),
+                Size = new Size(460, 25),
                 ForeColor = Color.FromArgb(180, 220, 255),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
             };
             gbTime.Controls.Add(lblCurSetting);
 
-            TextBox txtDays = new TextBox { Location = new Point(15, 105), Size = new Size(45, 25), Font = new Font("Consolas", 10), Text = "2" };
-            Label lblD = new Label { Text = "일", Location = new Point(63, 107), Size = new Size(20, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
-            TextBox txtHours = new TextBox { Location = new Point(88, 105), Size = new Size(45, 25), Font = new Font("Consolas", 10), Text = "5" };
-            Label lblH = new Label { Text = "시간", Location = new Point(136, 107), Size = new Size(35, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
-            TextBox txtMins = new TextBox { Location = new Point(175, 105), Size = new Size(45, 25), Font = new Font("Consolas", 10), Text = "30" };
-            Label lblM = new Label { Text = "분 남음", Location = new Point(223, 107), Size = new Size(55, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
+            TextBox txtDays = new TextBox { Location = new Point(15, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "2" };
+            Label lblD = new Label { Text = "일", Location = new Point(57, 107), Size = new Size(18, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
+            TextBox txtHours = new TextBox { Location = new Point(78, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "5" };
+            Label lblH = new Label { Text = "시간", Location = new Point(120, 107), Size = new Size(32, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
+            TextBox txtMins = new TextBox { Location = new Point(155, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "30" };
+            Label lblM = new Label { Text = "분 남음", Location = new Point(197, 107), Size = new Size(55, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
 
             gbTime.Controls.Add(txtDays);
             gbTime.Controls.Add(lblD);
@@ -1823,8 +2015,8 @@ namespace AntigravityTokenMonitor
             Button btnApplyTime = new Button
             {
                 Text = "리셋 시각 계산 및 적용",
-                Location = new Point(290, 102),
-                Size = new Size(165, 30),
+                Location = new Point(265, 102),
+                Size = new Size(210, 32),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(52, 152, 219),
@@ -1870,11 +2062,12 @@ namespace AntigravityTokenMonitor
             Button btnClose = new Button
             {
                 Text = "닫기",
-                Location = new Point(400, 475),
-                Size = new Size(90, 32),
+                Location = new Point(405, 520),
+                Size = new Size(100, 36),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
-                BackColor = Color.FromArgb(100, 100, 100)
+                BackColor = Color.FromArgb(100, 100, 100),
+                Font = new Font("맑은 고딕", 9f)
             };
             btnClose.Click += delegate(object sender, EventArgs e) { f.Close(); };
             f.Controls.Add(btnClose);

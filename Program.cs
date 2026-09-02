@@ -167,7 +167,7 @@ namespace AntigravityTokenMonitor
             _jsonSerializer = new JavaScriptSerializer();
             _config = LoadConfig();
             _calibHistory = LoadCalibHistory();
-            _state = new MonitorState();
+            _state = LoadState();
 
             WriteSystemLog("INFO", "Antigravity Token Monitor v4.3 시작");
 
@@ -305,6 +305,55 @@ namespace AntigravityTokenMonitor
             }
         }
 
+        private static MonitorState LoadState()
+        {
+            try
+            {
+                string path = Path.Combine(_configDir, "state.json");
+                if (File.Exists(path))
+                {
+                    string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
+                    var dict = _jsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                    MonitorState s = new MonitorState();
+                    if (dict.ContainsKey("last_weekly_reset_id") && dict["last_weekly_reset_id"] != null)
+                        s.LastWeeklyResetId = Convert.ToString(dict["last_weekly_reset_id"]);
+                    if (dict.ContainsKey("last_tracked_5h_percent") && dict["last_tracked_5h_percent"] != null)
+                        s.LastTracked5HourPercent = Convert.ToDouble(dict["last_tracked_5h_percent"]);
+                    if (dict.ContainsKey("last_tracked_5h_reset_time") && dict["last_tracked_5h_reset_time"] != null)
+                        s.LastTracked5HourResetTime = Convert.ToString(dict["last_tracked_5h_reset_time"]);
+                    if (dict.ContainsKey("weekly_cumulative_5h_consumed") && dict["weekly_cumulative_5h_consumed"] != null)
+                        s.WeeklyCumulative5hConsumed = Convert.ToDouble(dict["weekly_cumulative_5h_consumed"]);
+                    if (dict.ContainsKey("remaining_weekly_percent") && dict["remaining_weekly_percent"] != null)
+                        s.RemainingWeeklyPercent = Convert.ToDouble(dict["remaining_weekly_percent"]);
+                    if (dict.ContainsKey("weekly_first_active_time") && dict["weekly_first_active_time"] != null)
+                        s.WeeklyFirstActiveTimeStr = Convert.ToString(dict["weekly_first_active_time"]);
+                    return s;
+                }
+            }
+            catch { }
+            return new MonitorState();
+        }
+
+        private static void SaveState()
+        {
+            try
+            {
+                if (!Directory.Exists(_configDir)) Directory.CreateDirectory(_configDir);
+                Dictionary<string, object> dict = new Dictionary<string, object>
+                {
+                    { "last_weekly_reset_id", _state.LastWeeklyResetId },
+                    { "last_tracked_5h_percent", _state.LastTracked5HourPercent },
+                    { "last_tracked_5h_reset_time", _state.LastTracked5HourResetTime },
+                    { "weekly_cumulative_5h_consumed", _state.WeeklyCumulative5hConsumed },
+                    { "remaining_weekly_percent", _state.RemainingWeeklyPercent },
+                    { "weekly_first_active_time", _state.WeeklyFirstActiveTimeStr }
+                };
+                string json = _jsonSerializer.Serialize(dict);
+                File.WriteAllText(Path.Combine(_configDir, "state.json"), json, System.Text.Encoding.UTF8);
+            }
+            catch { }
+        }
+
         private static void WriteUsageLog(double rem5hPct, double remWkPct, string raw)
         {
             try
@@ -392,20 +441,22 @@ namespace AntigravityTokenMonitor
                     // 주간 리셋 주기 확인 및 새 주간 첫 토큰 소비 추적
                     CheckWeeklyCycleAndFirstUsage(rem5h, resetTimeStr);
 
-                    // 5시간 실소모량 누적 합산 (주간 누적 소모량 추적용)
+                    // 5시간 실소모량 누적 합산 및 주간 잔여량 차감
+                    double mult = _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
                     if (_state.LastTracked5HourPercent > 0 && !string.IsNullOrEmpty(_state.LastTracked5HourResetTime) && _state.LastTracked5HourResetTime == resetTimeStr)
                     {
                         double delta5h = _state.LastTracked5HourPercent - rem5h;
                         if (delta5h > 0.001)
                         {
                             _state.WeeklyCumulative5hConsumed += delta5h;
+                            _state.RemainingWeeklyPercent = Math.Max(0.0, Math.Min(100.0, _state.RemainingWeeklyPercent - (delta5h / mult)));
                         }
                     }
                     _state.LastTracked5HourPercent = rem5h;
                     _state.LastTracked5HourResetTime = resetTimeStr;
+                    SaveState();
 
-                    double remWk = CalculateEstimatedWeeklyPercent(rem5h, resetTimeStr);
-                    _state.RemainingWeeklyPercent = remWk;
+                    double remWk = _state.RemainingWeeklyPercent;
 
                     WriteUsageLog(rem5h, remWk, _state.RawJson);
 
@@ -785,37 +836,15 @@ namespace AntigravityTokenMonitor
 
         private static double CalculateEstimatedWeeklyPercent(double current5hRemPct, string currentResetTimeStr)
         {
-            double mult = _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
+            return _state.RemainingWeeklyPercent;
+        }
 
-            if (_calibHistory != null && _calibHistory.Count > 0)
-            {
-                WeeklyCalibPoint lastPoint = _calibHistory[_calibHistory.Count - 1];
-
-                // 5시간 세션이 변경되었을 때: 이전 세션까지 계산된 주간 잔여량을 기준으로 연속 기준점(Chained Anchor) 자동 생성
-                if (!string.IsNullOrEmpty(lastPoint.ResetTime) && !string.IsNullOrEmpty(currentResetTimeStr) && lastPoint.ResetTime != currentResetTimeStr)
-                {
-                    double currentWk = _state.RemainingWeeklyPercent;
-                    if (currentWk <= 0.0 || currentWk > 100.0) currentWk = 100.0;
-
-                    WeeklyCalibPoint chainedAnchor = new WeeklyCalibPoint
-                    {
-                        ResetTime = currentResetTimeStr,
-                        FiveHourPercent = current5hRemPct,
-                        UserWeeklyPercent = currentWk,
-                        Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-                    };
-                    _calibHistory.Add(chainedAnchor);
-                    SaveCalibHistory(_calibHistory);
-                    lastPoint = chainedAnchor;
-                }
-
-                double delta5hSinceCalib = Math.Max(0.0, lastPoint.FiveHourPercent - current5hRemPct);
-                double deltaWkSinceCalib = delta5hSinceCalib / mult;
-                return Math.Max(0.0, Math.Min(100.0, lastPoint.UserWeeklyPercent - deltaWkSinceCalib));
-            }
-
-            double consumed5h = Math.Max(0.0, 100.0 - current5hRemPct);
-            return Math.Max(0.0, Math.Min(100.0, 100.0 - (consumed5h / mult)));
+        public static void ForceSetWeeklyPercent(double val)
+        {
+            _state.RemainingWeeklyPercent = val;
+            SaveState();
+            SyncPushToServer();
+            WriteSystemLog("INFO", string.Format("주간 잔여량 단순 보정 완료: {0}% (배율 및 누적량 유지)", val));
         }
 
         public static void RecordUserWeeklyCalibration(double userWkPct)
@@ -1001,8 +1030,15 @@ namespace AntigravityTokenMonitor
                             {
                                 _state.WeeklyCumulative5hConsumed = Convert.ToDouble(dict["weekly_cumulative_5h_consumed"]);
                             }
+                            if (dict.ContainsKey("last_weekly_reset_id") && dict["last_weekly_reset_id"] != null)
+                                _state.LastWeeklyResetId = Convert.ToString(dict["last_weekly_reset_id"]);
+                            if (dict.ContainsKey("last_tracked_5h_percent") && dict["last_tracked_5h_percent"] != null)
+                                _state.LastTracked5HourPercent = Convert.ToDouble(dict["last_tracked_5h_percent"]);
+                            if (dict.ContainsKey("last_tracked_5h_reset_time") && dict["last_tracked_5h_reset_time"] != null)
+                                _state.LastTracked5HourResetTime = Convert.ToString(dict["last_tracked_5h_reset_time"]);
 
                             SaveConfig(_config);
+                            SaveState();
                             WriteSystemLog("INFO", string.Format("클라우드 Key-Value 동기화 수신 성공 (주간%: {0:F1}%, 배율: {1:F1}배)",
                                 _state.RemainingWeeklyPercent, _config.weekly_multiplier));
                         }
@@ -1045,6 +1081,9 @@ namespace AntigravityTokenMonitor
                 payload["weekly_reset_time"] = _config.weekly_reset_time;
                 payload["weekly_first_active_time"] = _state.WeeklyFirstActiveTimeStr;
                 payload["weekly_cumulative_5h_consumed"] = _state.WeeklyCumulative5hConsumed;
+                payload["last_weekly_reset_id"] = _state.LastWeeklyResetId;
+                payload["last_tracked_5h_percent"] = _state.LastTracked5HourPercent;
+                payload["last_tracked_5h_reset_time"] = _state.LastTracked5HourResetTime;
 
                 string json = _jsonSerializer.Serialize(payload);
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(json);
@@ -1608,31 +1647,63 @@ namespace AntigravityTokenMonitor
             };
             gbCalib.Controls.Add(lblUnit);
 
-            Button btnSave = new Button
+            Button btnForceSave = new Button
             {
-                Text = "주간 % 보정 저장",
-                Location = new Point(220, 83),
-                Size = new Size(130, 30),
+                Text = "주간 % 단순보정 (배율고정)",
+                Location = new Point(215, 68),
+                Size = new Size(245, 28),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(46, 204, 113),
                 Font = new Font("맑은 고딕", 9f, FontStyle.Bold)
             };
-            btnSave.Click += delegate(object sender, EventArgs e)
+            btnForceSave.Click += delegate(object sender, EventArgs e)
             {
                 double val;
                 if (double.TryParse(txtWk.Text.Trim(), out val) && val >= 0.0 && val <= 100.0)
                 {
-                    RecordUserWeeklyCalibration(val);
-                    MessageBox.Show(f, string.Format("주간 잔여량이 {0:F1}% 로 보정되었습니다.\r\n현재 적용 주간/일간 배율: {1:F1}배", val, _config.weekly_multiplier),
-                        "보정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ForceSetWeeklyPercent(val);
+                    MessageBox.Show(f, string.Format("주간 잔여량이 {0:F1}% 로 단순 보정되었습니다.\r\n(배율은 기존 {1:F1}배 유지됨)", val, _config.weekly_multiplier),
+                        "단순 보정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
                     MessageBox.Show(f, "0 ~ 100 사이의 올바른 % 숫자를 입력하세요.", "입력 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             };
-            gbCalib.Controls.Add(btnSave);
+            gbCalib.Controls.Add(btnForceSave);
+
+            Button btnAutoLearn = new Button
+            {
+                Text = "주간 % 입력 및 배율 자동학습",
+                Location = new Point(215, 100),
+                Size = new Size(245, 28),
+                FlatStyle = FlatStyle.Flat,
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(52, 152, 219),
+                Font = new Font("맑은 고딕", 9f, FontStyle.Regular)
+            };
+            btnAutoLearn.Click += delegate(object sender, EventArgs e)
+            {
+                double val;
+                if (double.TryParse(txtWk.Text.Trim(), out val) && val >= 0.0 && val <= 100.0)
+                {
+                    RecordUserWeeklyCalibration(val);
+                    MessageBox.Show(f, string.Format("배율 학습이 실행되었습니다.\r\n계산된 신규 주간/일간 배율: {0:F1}배", _config.weekly_multiplier),
+                        "학습 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    
+                    // 배율 텍스트박스 업데이트
+                    foreach (Control c in gbCalib.Controls)
+                    {
+                        if (c is TextBox && c.Location.Y > 120) { c.Text = _config.weekly_multiplier.ToString("F1"); }
+                    }
+                }
+                else
+                {
+                    MessageBox.Show(f, "0 ~ 100 사이의 올바른 % 숫자를 입력하세요.", "입력 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+            gbCalib.Controls.Add(btnAutoLearn);
 
             // 배율 직접 수정 영역
             Label lblMult = new Label

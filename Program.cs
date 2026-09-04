@@ -640,29 +640,59 @@ namespace AntigravityTokenMonitor
 
                 if (_state.LastWeeklyResetId != currentCycleId)
                 {
+                    bool isNewWeeklyCycle = false;
+                    DateTime oldResetDt;
+
+                    if (string.IsNullOrEmpty(_state.LastWeeklyResetId))
+                    {
+                        isNewWeeklyCycle = true;
+                    }
+                    else if (DateTime.TryParse(_state.LastWeeklyResetId, out oldResetDt))
+                    {
+                        // 이전 주간 리셋 시각과 새로 계산된 주간 리셋 시각이 48시간 이상 차이날 때만 (실제 다음 주간으로 진입했을 때만) 100% 리셋 수행
+                        // 사용자가 리셋 시각을 간편 조정한 경우(동일 주간 내 시각 미세조정)는 기존 주간 잔여량 및 소모량 데이터 유지
+                        if ((lastResetDt - oldResetDt).TotalHours >= 48.0)
+                        {
+                            isNewWeeklyCycle = true;
+                        }
+                    }
+                    else
+                    {
+                        isNewWeeklyCycle = true;
+                    }
+
                     _state.LastWeeklyResetId = currentCycleId;
-                    _state.RemainingWeeklyPercent = 100.0;
-                    _state.WeeklyFirstActiveTimeStr = "아직 소비 없음 (리셋 대기)";
-                    _state.Baseline5hAtWeeklyReset = current5hRem;
-                    _state.WeeklyCumulative5hConsumed = 0.0;
 
-                    WeeklyCalibPoint anchorPoint = new WeeklyCalibPoint
+                    if (isNewWeeklyCycle)
                     {
-                        ResetTime = current5hResetStr,
-                        FiveHourPercent = current5hRem,
-                        UserWeeklyPercent = 100.0,
-                        Timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
-                    };
-                    if (_calibHistory == null) _calibHistory = new List<WeeklyCalibPoint>();
-                    _calibHistory.Add(anchorPoint);
-                    SaveCalibHistory(_calibHistory);
+                        _state.RemainingWeeklyPercent = 100.0;
+                        _state.WeeklyFirstActiveTimeStr = "아직 소비 없음 (리셋 대기)";
+                        _state.Baseline5hAtWeeklyReset = current5hRem;
+                        _state.WeeklyCumulative5hConsumed = 0.0;
 
-                    WriteSystemLog("INFO", string.Format("🎯 새 주간 사이클 진입 ({0}): 주간 잔여량 100% 초기화 및 기준점 설정 (5h 잔여: {1:F1}%)",
-                        currentCycleId, current5hRem));
+                        WeeklyCalibPoint anchorPoint = new WeeklyCalibPoint
+                        {
+                            ResetTime = current5hResetStr,
+                            FiveHourPercent = current5hRem,
+                            UserWeeklyPercent = 100.0,
+                            Timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
+                        };
+                        if (_calibHistory == null) _calibHistory = new List<WeeklyCalibPoint>();
+                        _calibHistory.Add(anchorPoint);
+                        SaveCalibHistory(_calibHistory);
 
-                    if (_config.sync_enabled)
+                        WriteSystemLog("INFO", string.Format("🎯 새 주간 사이클 진입 ({0}): 주간 잔여량 100% 초기화 및 기준점 설정 (5h 잔여: {1:F1}%)",
+                            currentCycleId, current5hRem));
+
+                        if (_config.sync_enabled)
+                        {
+                            SyncPushToServer();
+                        }
+                    }
+                    else
                     {
-                        SyncPushToServer();
+                        WriteSystemLog("INFO", string.Format("주간 리셋 시각 설정 변경 감지 ({0}): 동일 주간 범위 내 조정이므로 기존 주간 잔여량({1:F1}%) 유효 유지",
+                            currentCycleId, _state.RemainingWeeklyPercent));
                     }
                 }
                 else

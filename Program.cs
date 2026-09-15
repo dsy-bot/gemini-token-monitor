@@ -294,7 +294,7 @@ namespace AntigravityTokenMonitor
                 sb.AppendLine(string.Format("  \"interval_minutes\": {0},", cfg.interval_minutes));
                 sb.AppendLine(string.Format("  \"weekly_reset_day\": \"{0}\",", cfg.weekly_reset_day ?? "Monday"));
                 sb.AppendLine(string.Format("  \"weekly_reset_time\": \"{0}\",", cfg.weekly_reset_time ?? "00:00"));
-                sb.AppendLine(string.Format("  \"weekly_multiplier\": {0:F1},", cfg.weekly_multiplier > 0 ? cfg.weekly_multiplier : 30.9));
+                sb.AppendLine(string.Format("  \"weekly_multiplier\": {0:F3},", cfg.weekly_multiplier > 0 ? cfg.weekly_multiplier : 30.9));
                 sb.AppendLine(string.Format("  \"sync_enabled\": {0},", cfg.sync_enabled ? "true" : "false"));
                 sb.AppendLine(string.Format("  \"sync_url\": \"{0}\",", cfg.sync_url ?? ""));
                 sb.AppendLine(string.Format("  \"sync_api_key\": \"{0}\",", cfg.sync_api_key ?? ""));
@@ -308,6 +308,20 @@ namespace AntigravityTokenMonitor
                     if (cfg.work_schedule != null && cfg.work_schedule.ContainsKey(d)) val = cfg.work_schedule[d];
                     sb.AppendLine(string.Format("    \"{0}\": \"{1}\"{2}", d, val, i < days.Length - 1 ? "," : ""));
                 }
+                sb.AppendLine("  },");
+                var td = cfg.threshold_danger ?? new ThresholdConfig { speed_5h = 40.0, predicted_5h = 0.0, predicted_wk = 0.0 };
+                var tw = cfg.threshold_warning ?? new ThresholdConfig { speed_5h = 20.0, predicted_5h = 15.0, predicted_wk = 10.0 };
+                sb.AppendLine("  // 위험(Danger) 판정 기준");
+                sb.AppendLine("  \"threshold_danger\": {");
+                sb.AppendLine(string.Format("    \"speed_5h\": {0:F1},", td.speed_5h));
+                sb.AppendLine(string.Format("    \"predicted_5h\": {0:F1},", td.predicted_5h));
+                sb.AppendLine(string.Format("    \"predicted_wk\": {0:F1}", td.predicted_wk));
+                sb.AppendLine("  },");
+                sb.AppendLine("  // 경고(Warning) 판정 기준");
+                sb.AppendLine("  \"threshold_warning\": {");
+                sb.AppendLine(string.Format("    \"speed_5h\": {0:F1},", tw.speed_5h));
+                sb.AppendLine(string.Format("    \"predicted_5h\": {0:F1},", tw.predicted_5h));
+                sb.AppendLine(string.Format("    \"predicted_wk\": {0:F1}", tw.predicted_wk));
                 sb.AppendLine("  }");
                 sb.AppendLine("}");
                 File.WriteAllText(configPath, sb.ToString(), System.Text.Encoding.UTF8);
@@ -973,6 +987,77 @@ namespace AntigravityTokenMonitor
             WriteSystemLog("INFO", string.Format("주간 잔여량 단순 보정 완료: {0}% (배율 및 누적량 유지)", val));
         }
 
+        private static double CalculateCentralMultiplier(List<WeeklyCalibPoint> history, WeeklyCalibPoint currentNewPoint, double currentCumulative5h)
+        {
+            if (history == null) history = new List<WeeklyCalibPoint>();
+            List<WeeklyCalibPoint> allPoints = new List<WeeklyCalibPoint>(history);
+            if (currentNewPoint != null) allPoints.Add(currentNewPoint);
+
+            WeeklyCalibPoint anchor = null;
+            for (int i = allPoints.Count - 1; i >= 0; i--)
+            {
+                if (allPoints[i].UserWeeklyPercent >= 99.9)
+                {
+                    anchor = allPoints[i];
+                    break;
+                }
+            }
+
+            List<double> rawMultipliers = new List<double>();
+            List<double> weights = new List<double>();
+
+            for (int i = 0; i < allPoints.Count; i++)
+            {
+                WeeklyCalibPoint pt = allPoints[i];
+                if (pt.UserWeeklyPercent >= 99.9) continue;
+
+                double wkConsumed = anchor != null ? (anchor.UserWeeklyPercent - pt.UserWeeklyPercent) : (100.0 - pt.UserWeeklyPercent);
+                double h5Consumed = (i == allPoints.Count - 1) ? currentCumulative5h : 0.0;
+
+                if (h5Consumed < 0.5 && anchor != null && anchor.ResetTime == pt.ResetTime)
+                {
+                    h5Consumed = Math.Max(0.0, anchor.FiveHourPercent - pt.FiveHourPercent);
+                }
+
+                if (wkConsumed >= 0.5 && h5Consumed >= 0.5)
+                {
+                    double m = h5Consumed / wkConsumed;
+                    if (m >= 1.0 && m <= 300.0)
+                    {
+                        rawMultipliers.Add(m);
+                        weights.Add(wkConsumed);
+                    }
+                }
+            }
+
+            if (rawMultipliers.Count == 0) return _config.weekly_multiplier > 0 ? _config.weekly_multiplier : 30.9;
+
+            double weightedSum = 0.0;
+            double totalWeight = 0.0;
+            for (int i = 0; i < rawMultipliers.Count; i++)
+            {
+                weightedSum += rawMultipliers[i] * weights[i];
+                totalWeight += weights[i];
+            }
+            double wma = totalWeight > 0 ? (weightedSum / totalWeight) : rawMultipliers[rawMultipliers.Count - 1];
+
+            List<double> sorted = new List<double>(rawMultipliers);
+            sorted.Sort();
+            double median;
+            int mid = sorted.Count / 2;
+            if (sorted.Count % 2 != 0)
+            {
+                median = sorted[mid];
+            }
+            else
+            {
+                median = (sorted[mid - 1] + sorted[mid]) / 2.0;
+            }
+
+            double finalMult = (wma * 0.6) + (median * 0.4);
+            return Math.Round(Math.Max(1.0, Math.Min(300.0, finalMult)), 3);
+        }
+
         public static void RecordUserWeeklyCalibration(double userWkPct)
         {
             try
@@ -989,76 +1074,17 @@ namespace AntigravityTokenMonitor
                     Timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
                 };
 
-                // 1. 이번 주 주간 리셋(100%) 기준점 탐색
-                WeeklyCalibPoint weeklyAnchor = null;
-                if (_calibHistory != null && _calibHistory.Count > 0)
+                double newMult = CalculateCentralMultiplier(_calibHistory, newPoint, _state.WeeklyCumulative5hConsumed);
+                if (newMult >= 1.0 && newMult <= 300.0)
                 {
-                    for (int i = _calibHistory.Count - 1; i >= 0; i--)
-                    {
-                        if (_calibHistory[i].UserWeeklyPercent >= 99.9)
-                        {
-                            weeklyAnchor = _calibHistory[i];
-                            break;
-                        }
-                    }
+                    _config.weekly_multiplier = newMult;
+                    SaveConfig(_config);
+                    int sampleCount = (_calibHistory != null ? _calibHistory.Count : 0) + 1;
+                    WriteSystemLog("INFO", string.Format("🎯 배율 자동학습 완료 (샘플 {0}개 중앙값/가중평균): {1:F3}배 적용됨",
+                        sampleCount, newMult));
                 }
 
-                double totalWkConsumed = weeklyAnchor != null ? (weeklyAnchor.UserWeeklyPercent - userWkPct) : (100.0 - userWkPct);
-                double total5hConsumed = _state.WeeklyCumulative5hConsumed;
-
-                // 누적 기록이 아직 적을 경우 Anchor와 현재 5h 차이도 합산
-                if (weeklyAnchor != null && total5hConsumed < 0.5)
-                {
-                    if (weeklyAnchor.ResetTime == currentReset)
-                    {
-                        total5hConsumed = Math.Max(0.0, weeklyAnchor.FiveHourPercent - current5h);
-                    }
-                }
-
-                // 2. 누적 총량 기반 배율 자동 계산 (소모량이 유의미할 때)
-                if (totalWkConsumed >= 0.1 && total5hConsumed >= 0.5)
-                {
-                    double calculatedMultiplier = Math.Round(total5hConsumed / totalWkConsumed, 1);
-                    if (calculatedMultiplier >= 1.0 && calculatedMultiplier <= 300.0)
-                    {
-                        _config.weekly_multiplier = calculatedMultiplier;
-                        SaveConfig(_config);
-                        WriteSystemLog("INFO", string.Format("🎯 누적 총량 기반 배율 자동보정 완료: {0:F1}배 (이번주 5h누적소모: {1:F1}%, 주간소모: {2:F1}%)",
-                            calculatedMultiplier, total5hConsumed, totalWkConsumed));
-                    }
-                }
-                else if (_calibHistory != null && _calibHistory.Count > 0)
-                {
-                    // 3. 누적량이 부족할 경우 직전 매칭 포인트 2차 검사
-                    WeeklyCalibPoint prevMatch = null;
-                    for (int i = _calibHistory.Count - 1; i >= 0; i--)
-                    {
-                        if (_calibHistory[i].ResetTime == currentReset && !string.IsNullOrEmpty(currentReset))
-                        {
-                            prevMatch = _calibHistory[i];
-                            break;
-                        }
-                    }
-
-                    if (prevMatch != null)
-                    {
-                        double delta5h = prevMatch.FiveHourPercent - current5h;
-                        double deltaWk = prevMatch.UserWeeklyPercent - userWkPct;
-
-                        if (delta5h >= 1.0 && deltaWk >= 0.1)
-                        {
-                            double calculatedMultiplier = Math.Round(delta5h / deltaWk, 1);
-                            if (calculatedMultiplier >= 1.0 && calculatedMultiplier <= 300.0)
-                            {
-                                _config.weekly_multiplier = calculatedMultiplier;
-                                SaveConfig(_config);
-                                WriteSystemLog("INFO", string.Format("주간/일간 배율 세션 보정 완료: {0:F1}배 (5h소모: {1:F1}%, 주간소모: {2:F1}%)",
-                                    calculatedMultiplier, delta5h, deltaWk));
-                            }
-                        }
-                    }
-                }
-
+                if (_calibHistory == null) _calibHistory = new List<WeeklyCalibPoint>();
                 _calibHistory.Add(newPoint);
                 SaveCalibHistory(_calibHistory);
 
@@ -1165,7 +1191,7 @@ namespace AntigravityTokenMonitor
 
                             SaveConfig(_config);
                             SaveState();
-                            WriteSystemLog("INFO", string.Format("클라우드 Key-Value 동기화 수신 성공 (주간%: {0:F1}%, 배율: {1:F1}배)",
+                            WriteSystemLog("INFO", string.Format("클라우드 Key-Value 동기화 수신 성공 (주간%: {0:F1}%, 배율: {1:F3}배)",
                                 _state.RemainingWeeklyPercent, _config.weekly_multiplier));
                         }
                     }
@@ -1356,6 +1382,15 @@ namespace AntigravityTokenMonitor
                 WriteSystemLog("WARN", "속도 계산 예외: " + ex.Message);
             }
             return 0.0;
+        }
+
+        private static bool TryParseNumericInput(string input, out double result)
+        {
+            result = 0.0;
+            if (string.IsNullOrWhiteSpace(input)) return false;
+
+            string cleaned = System.Text.RegularExpressions.Regex.Replace(input, @"[^\d\.,\-]", "").Replace(',', '.');
+            return double.TryParse(cleaned, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out result);
         }
 
         private static void CalculateResetHours(string resetTimeIso, out double hours5h, out DateTime reset5hTarget, out double hoursWeekly, out DateTime resetWkTarget)
@@ -1690,7 +1725,7 @@ namespace AntigravityTokenMonitor
                     "  5시간 실측    : {3:F1} %  (공식 리셋: {4:F1}h 후, 5h 실근무: {5:F1}h)\r\n" +
                     "  [-] 5시간 첫소비 : {17}\r\n" +
                     "  [-] 금일 잔여 실근무 : {18:F1} h (오늘 퇴근까지)\r\n" +
-                    "  주간 잔여량   : {6:F1} %  (주간/일간 배율: {7:F1}배 적용 중)\r\n" +
+                    "  주간 잔여량   : {6:F1} %  (주간/일간 배율: {7:F3}배 적용 중)\r\n" +
                     "  5시간 소모속도: {8:F2} %/h\r\n" +
                     "  주간 소모속도 : {19:F2} %/h\r\n" +
                     "  하루 주간 소모: 오늘 실소모 {20:F1} %  |  일일 예상 {21:F1} %/day ({22:F1}h근무 기준)\r\n" +
@@ -1852,9 +1887,10 @@ namespace AntigravityTokenMonitor
 
             TextBox txtWk = new TextBox
             {
-                Location = new Point(115, 73),
-                Size = new Size(70, 25),
+                Location = new Point(110, 73),
+                Size = new Size(80, 25),
                 Font = new Font("Consolas", 10),
+                ImeMode = ImeMode.Off,
                 Text = _state.RemainingWeeklyPercent.ToString("F1")
             };
             gbCalib.Controls.Add(txtWk);
@@ -1862,7 +1898,7 @@ namespace AntigravityTokenMonitor
             Label lblUnit = new Label
             {
                 Text = "%",
-                Location = new Point(190, 76),
+                Location = new Point(195, 76),
                 Size = new Size(20, 23),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
@@ -1882,10 +1918,11 @@ namespace AntigravityTokenMonitor
             btnForceSave.Click += delegate(object sender, EventArgs e)
             {
                 double val;
-                if (double.TryParse(txtWk.Text.Trim(), out val) && val >= 0.0 && val <= 100.0)
+                if (TryParseNumericInput(txtWk.Text, out val) && val >= 0.0 && val <= 100.0)
                 {
                     ForceSetWeeklyPercent(val);
-                    MessageBox.Show(f, string.Format("주간 잔여량이 {0:F1}% 로 단순 보정되었습니다.\r\n(배율은 기존 {1:F1}배 유지됨)", val, _config.weekly_multiplier),
+                    txtWk.Text = val.ToString("F1");
+                    MessageBox.Show(f, string.Format("주간 잔여량이 {0:F1}% 로 단순 보정되었습니다.\r\n(배율은 기존 {1:F3}배 유지됨)", val, _config.weekly_multiplier),
                         "단순 보정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -1908,16 +1945,17 @@ namespace AntigravityTokenMonitor
             btnAutoLearn.Click += delegate(object sender, EventArgs e)
             {
                 double val;
-                if (double.TryParse(txtWk.Text.Trim(), out val) && val >= 0.0 && val <= 100.0)
+                if (TryParseNumericInput(txtWk.Text, out val) && val >= 0.0 && val <= 100.0)
                 {
                     RecordUserWeeklyCalibration(val);
-                    MessageBox.Show(f, string.Format("배율 학습이 실행되었습니다.\r\n계산된 신규 주간/일간 배율: {0:F1}배", _config.weekly_multiplier),
+                    txtWk.Text = val.ToString("F1");
+                    MessageBox.Show(f, string.Format("배율 학습이 실행되었습니다.\r\n계산된 신규 주간/일간 배율: {0:F3}배", _config.weekly_multiplier),
                         "학습 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     
                     // 배율 텍스트박스 업데이트
                     foreach (Control c in gbCalib.Controls)
                     {
-                        if (c is TextBox && c.Location.Y > 140) { c.Text = _config.weekly_multiplier.ToString("F1"); }
+                        if (c is TextBox && c.Location.Y > 140) { c.Text = _config.weekly_multiplier.ToString("F3"); }
                     }
                 }
                 else
@@ -1940,17 +1978,18 @@ namespace AntigravityTokenMonitor
 
             TextBox txtMult = new TextBox
             {
-                Location = new Point(115, 147),
-                Size = new Size(70, 25),
+                Location = new Point(110, 147),
+                Size = new Size(80, 25),
                 Font = new Font("Consolas", 10),
-                Text = _config.weekly_multiplier.ToString("F1")
+                ImeMode = ImeMode.Off,
+                Text = _config.weekly_multiplier.ToString("F3")
             };
             gbCalib.Controls.Add(txtMult);
 
             Label lblMultUnit = new Label
             {
                 Text = "배",
-                Location = new Point(190, 149),
+                Location = new Point(195, 149),
                 Size = new Size(25, 23),
                 ForeColor = Color.White,
                 Font = new Font("맑은 고딕", 9.5f, FontStyle.Regular)
@@ -1970,12 +2009,13 @@ namespace AntigravityTokenMonitor
             btnSaveMult.Click += delegate(object sender, EventArgs e)
             {
                 double mVal;
-                if (double.TryParse(txtMult.Text.Trim(), out mVal) && mVal >= 1.0 && mVal <= 500.0)
+                if (TryParseNumericInput(txtMult.Text, out mVal) && mVal >= 1.0 && mVal <= 500.0)
                 {
-                    _config.weekly_multiplier = Math.Round(mVal, 2);
+                    _config.weekly_multiplier = Math.Round(mVal, 3);
                     SaveConfig(_config);
                     PerformCheck();
-                    MessageBox.Show(f, string.Format("주간/일간 배율이 {0:F1}배로 직접 설정되었습니다.", _config.weekly_multiplier),
+                    txtMult.Text = _config.weekly_multiplier.ToString("F3");
+                    MessageBox.Show(f, string.Format("주간/일간 배율이 {0:F3}배로 직접 설정되었습니다.", _config.weekly_multiplier),
                         "배율 설정 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -2028,11 +2068,11 @@ namespace AntigravityTokenMonitor
             };
             gbTime.Controls.Add(lblCurSetting);
 
-            TextBox txtDays = new TextBox { Location = new Point(15, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "2" };
+            TextBox txtDays = new TextBox { Location = new Point(15, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "2", ImeMode = ImeMode.Off };
             Label lblD = new Label { Text = "일", Location = new Point(57, 107), Size = new Size(18, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
-            TextBox txtHours = new TextBox { Location = new Point(78, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "5" };
+            TextBox txtHours = new TextBox { Location = new Point(78, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "5", ImeMode = ImeMode.Off };
             Label lblH = new Label { Text = "시간", Location = new Point(120, 107), Size = new Size(32, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
-            TextBox txtMins = new TextBox { Location = new Point(155, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "30" };
+            TextBox txtMins = new TextBox { Location = new Point(155, 105), Size = new Size(40, 25), Font = new Font("Consolas", 10), Text = "30", ImeMode = ImeMode.Off };
             Label lblM = new Label { Text = "분 남음", Location = new Point(197, 107), Size = new Size(55, 25), ForeColor = Color.White, Font = new Font("맑은 고딕", 9.5f) };
 
             gbTime.Controls.Add(txtDays);

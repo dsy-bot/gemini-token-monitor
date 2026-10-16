@@ -61,12 +61,14 @@ namespace AntigravityTokenMonitor
     {
         public int interval_seconds { get; set; }
         public int interval_minutes { get; set; }
+        public int speed_window_seconds { get; set; }
         public Dictionary<string, string> work_schedule { get; set; }
         public Dictionary<string, ModelThreshold> model_thresholds { get; set; }
 
         public AppConfig()
         {
-            interval_seconds = 300;
+            interval_seconds = 60;
+            speed_window_seconds = 3600; // 기본 1시간 윈도우
             work_schedule = new Dictionary<string, string>();
             string[] days = new string[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
             foreach (string d in days) work_schedule[d] = "09:00-18:00";
@@ -79,7 +81,13 @@ namespace AntigravityTokenMonitor
         {
             if (interval_seconds > 0) return Math.Max(5, interval_seconds);
             if (interval_minutes > 0) return Math.Max(5, interval_minutes * 60);
-            return 300;
+            return 60;
+        }
+
+        public int GetEffectiveSpeedWindowSeconds()
+        {
+            if (speed_window_seconds > 0) return Math.Max(60, speed_window_seconds);
+            return 3600;
         }
     }
 
@@ -88,7 +96,7 @@ namespace AntigravityTokenMonitor
         public string BucketId;
         public string DisplayName;
         public string Window; // "5h" or "weekly"
-        public double RemainingPercent; // 0 ~ 100
+        public double RemainingPercent; // 원본 정밀도 유지 (0 ~ 100)
         public DateTime ResetTime;
         public double SpeedPerHour; // %/h
         public double PredictedRemainingPercent; // after remaining work hours
@@ -98,6 +106,12 @@ namespace AntigravityTokenMonitor
     {
         public string DisplayName;
         public Dictionary<string, QuotaBucket> Buckets = new Dictionary<string, QuotaBucket>();
+    }
+
+    public class HistoryPoint
+    {
+        public DateTime Timestamp;
+        public Dictionary<string, double> BucketPercents = new Dictionary<string, double>();
     }
 
     static class Program
@@ -118,8 +132,8 @@ namespace AntigravityTokenMonitor
         private static DateTime _lastCheckTime = DateTime.MinValue;
         private static List<QuotaGroup> _latestGroups = new List<QuotaGroup>();
 
-        // 직전 측정치 보관 (소비 속도 계산용: BucketId -> { Timestamp, RemainingPercent })
-        private static Dictionary<string, KeyValuePair<DateTime, double>> _prevBucketValues = new Dictionary<string, KeyValuePair<DateTime, double>>();
+        // 메모리 상의 최근 이력 보관 (N시간 속도 계산용)
+        private static List<HistoryPoint> _history = new List<HistoryPoint>();
 
         [STAThread]
         static void Main()
@@ -143,6 +157,9 @@ namespace AntigravityTokenMonitor
             EnsureDirectories();
             _jsonSerializer = new JavaScriptSerializer();
             _config = LoadConfig();
+
+            // 당일 기존 CSV 로그가 있다면 최근 이력 복원
+            LoadHistoryFromCsv();
 
             WriteSystemLog("INFO", "Antigravity Token Monitor v5.0 시작");
 
@@ -184,8 +201,7 @@ namespace AntigravityTokenMonitor
             }
             catch { }
 
-            AppConfig defaultCfg = new AppConfig();
-            return defaultCfg;
+            return new AppConfig();
         }
 
         private static void WriteSystemLog(string level, string message)
@@ -200,16 +216,77 @@ namespace AntigravityTokenMonitor
             catch { }
         }
 
-        private static void WriteUsageLog(string logSummary)
+        // CSV 파일에 순수 실측 소수점 값 기록
+        private static void AppendQuotaCsv(DateTime now, double gemini5h, double geminiWk, double argonWk, double claude5h, double claudeWk)
+        {
+            try
+            {
+                string filePath = Path.Combine(_usageDir, string.Format("{0}_usage.csv", now.ToString("yyyyMMdd")));
+                bool fileExists = File.Exists(filePath);
+
+                using (StreamWriter sw = new StreamWriter(filePath, true, System.Text.Encoding.UTF8))
+                {
+                    if (!fileExists)
+                    {
+                        sw.WriteLine("timestamp,gemini_5h,gemini_weekly,argon_weekly,claude_5h,claude_weekly");
+                    }
+                    sw.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss},{1:F6},{2:F6},{3:F6},{4:F6},{5:F6}",
+                        now, gemini5h, geminiWk, argonWk, claude5h, claudeWk));
+                }
+            }
+            catch { }
+        }
+
+        // CSV에서 당일 최근 이력 복원
+        private static void LoadHistoryFromCsv()
         {
             try
             {
                 DateTime now = DateTime.Now;
-                string filePath = Path.Combine(_usageDir, string.Format("{0}_usage.log", now.ToString("yyyyMMdd")));
-                string line = string.Format("[{0}] {1}", now.ToString("HH:mm:ss"), logSummary);
-                File.AppendAllLines(filePath, new string[] { line }, System.Text.Encoding.UTF8);
+                string filePath = Path.Combine(_usageDir, string.Format("{0}_usage.csv", now.ToString("yyyyMMdd")));
+                if (!File.Exists(filePath)) return;
+
+                string[] lines = File.ReadAllLines(filePath, System.Text.Encoding.UTF8);
+                if (lines.Length <= 1) return;
+
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string line = lines[i].Trim();
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    string[] parts = line.Split(',');
+                    if (parts.Length >= 6)
+                    {
+                        DateTime ts;
+                        double g5, gw, aw, c5, cw;
+                        if (DateTime.TryParse(parts[0], out ts) &&
+                            double.TryParse(parts[1], out g5) &&
+                            double.TryParse(parts[2], out gw) &&
+                            double.TryParse(parts[3], out aw) &&
+                            double.TryParse(parts[4], out c5) &&
+                            double.TryParse(parts[5], out cw))
+                        {
+                            HistoryPoint hp = new HistoryPoint { Timestamp = ts };
+                            hp.BucketPercents["gemini-5h"] = g5;
+                            hp.BucketPercents["gemini-weekly"] = gw;
+                            hp.BucketPercents["gemini-argon-wtu-weekly"] = aw;
+                            hp.BucketPercents["3p-5h"] = c5;
+                            hp.BucketPercents["3p-weekly"] = cw;
+                            _history.Add(hp);
+                        }
+                    }
+                }
+
+                TrimHistoryMemory();
             }
             catch { }
+        }
+
+        private static void TrimHistoryMemory()
+        {
+            if (_history.Count == 0) return;
+            DateTime cutoff = DateTime.Now.AddHours(-12.0); // 최근 12시간까지만 메모리에 보관
+            _history.RemoveAll(delegate(HistoryPoint p) { return p.Timestamp < cutoff; });
         }
 
         private static string FetchQuotaSummaryJson()
@@ -315,6 +392,47 @@ namespace AntigravityTokenMonitor
             return string.Empty;
         }
 
+        // N시간(speed_window_seconds) 윈도우 기반 정밀 소비속도 계산
+        private static double CalculateWindowSpeed(string bucketId, double currentRem, DateTime now, int windowSeconds)
+        {
+            if (_history == null || _history.Count == 0) return 0.0;
+
+            DateTime targetPast = now.AddSeconds(-windowSeconds);
+            HistoryPoint baselinePoint = null;
+
+            // 윈도우 시작점에 가장 가까운 과거 유효 샘플 탐색
+            for (int i = 0; i < _history.Count; i++)
+            {
+                var hp = _history[i];
+                if (hp.BucketPercents.ContainsKey(bucketId))
+                {
+                    if (hp.Timestamp >= targetPast)
+                    {
+                        baselinePoint = hp;
+                        break;
+                    }
+                    baselinePoint = hp; // 범위 이전 중 가장 최근 것 보관
+                }
+            }
+
+            if (baselinePoint == null || !baselinePoint.BucketPercents.ContainsKey(bucketId)) return 0.0;
+
+            double oldRem = baselinePoint.BucketPercents[bucketId];
+            double deltaHours = (now - baselinePoint.Timestamp).TotalHours;
+
+            // 경과 시간이 너무 짧거나(10초 미만) 리셋되어 잔여량이 오히려 늘어난 경우
+            if (deltaHours < (10.0 / 3600.0) || currentRem > (oldRem + 0.1))
+            {
+                return 0.0;
+            }
+
+            double consumed = oldRem - currentRem;
+            if (consumed <= 0.0) return 0.0;
+
+            double speed = consumed / deltaHours;
+            return Math.Round(speed, 2);
+        }
+
         private static List<QuotaGroup> ParseQuotaSummary(string json, DateTime now)
         {
             List<QuotaGroup> groups = new List<QuotaGroup>();
@@ -329,6 +447,9 @@ namespace AntigravityTokenMonitor
 
                 object[] groupList = resp["groups"] as object[];
                 if (groupList == null) return groups;
+
+                HistoryPoint curPoint = new HistoryPoint { Timestamp = now };
+                int windowSec = _config.GetEffectiveSpeedWindowSeconds();
 
                 foreach (object gObj in groupList)
                 {
@@ -361,32 +482,22 @@ namespace AntigravityTokenMonitor
                                     if (DateTime.TryParse(rTimeStr, out dt)) resetTime = dt.ToLocalTime();
                                 }
 
-                                double remPct = Math.Round(frac * 100.0, 2);
-                                double speedPerHour = 0.0;
+                                // 원본 정밀도 보존 (% 환산)
+                                double rawRemPct = frac * 100.0;
+                                curPoint.BucketPercents[bId] = rawRemPct;
 
-                                // 속도 계산
-                                if (_prevBucketValues.ContainsKey(bId))
-                                {
-                                    var prev = _prevBucketValues[bId];
-                                    double deltaHours = (now - prev.Key).TotalHours;
-                                    double deltaRem = prev.Value - remPct; // 양수면 소모
-                                    if (deltaHours >= 0.001 && deltaRem >= 0.0)
-                                    {
-                                        speedPerHour = Math.Round(deltaRem / deltaHours, 2);
-                                    }
-                                }
-
-                                _prevBucketValues[bId] = new KeyValuePair<DateTime, double>(now, remPct);
+                                // N시간 윈도우 기준 정밀 속도 계산
+                                double speedPerHour = CalculateWindowSpeed(bId, rawRemPct, now, windowSec);
 
                                 double activeWorkHours = CalculateActiveWorkingHours(now, resetTime, _config.work_schedule);
-                                double predictedRem = Math.Round(remPct - (speedPerHour * activeWorkHours), 2);
+                                double predictedRem = Math.Round(rawRemPct - (speedPerHour * activeWorkHours), 2);
 
                                 QuotaBucket bucket = new QuotaBucket
                                 {
                                     BucketId = bId,
                                     DisplayName = bName,
                                     Window = window,
-                                    RemainingPercent = remPct,
+                                    RemainingPercent = rawRemPct,
                                     ResetTime = resetTime,
                                     SpeedPerHour = speedPerHour,
                                     PredictedRemainingPercent = predictedRem
@@ -399,6 +510,18 @@ namespace AntigravityTokenMonitor
 
                     groups.Add(group);
                 }
+
+                // 현재 샘플 히스토리에 추가
+                _history.Add(curPoint);
+                TrimHistoryMemory();
+
+                // CSV 파일에 순수 실측 소수점 값 기록
+                double g5 = curPoint.BucketPercents.ContainsKey("gemini-5h") ? curPoint.BucketPercents["gemini-5h"] : 100.0;
+                double gw = curPoint.BucketPercents.ContainsKey("gemini-weekly") ? curPoint.BucketPercents["gemini-weekly"] : 100.0;
+                double aw = curPoint.BucketPercents.ContainsKey("gemini-argon-wtu-weekly") ? curPoint.BucketPercents["gemini-argon-wtu-weekly"] : 100.0;
+                double c5 = curPoint.BucketPercents.ContainsKey("3p-5h") ? curPoint.BucketPercents["3p-5h"] : 100.0;
+                double cw = curPoint.BucketPercents.ContainsKey("3p-weekly") ? curPoint.BucketPercents["3p-weekly"] : 100.0;
+                AppendQuotaCsv(now, g5, gw, aw, c5, cw);
             }
             catch (Exception ex)
             {
@@ -503,6 +626,15 @@ namespace AntigravityTokenMonitor
             {
                 try
                 {
+                    // 1. Hot-Reload: 매 호출 주기마다 config.json 최신 설정 자동 반영
+                    _config = LoadConfig();
+                    int targetIntervalMs = _config.GetEffectiveIntervalSeconds() * 1000;
+                    if (_timer != null && _timer.Interval != targetIntervalMs)
+                    {
+                        _timer.Interval = targetIntervalMs;
+                    }
+
+                    // 2. API 호출
                     string json = FetchQuotaSummaryJson();
                     if (string.IsNullOrEmpty(json))
                     {
@@ -515,17 +647,6 @@ namespace AntigravityTokenMonitor
                     _latestGroups = ParseQuotaSummary(json, now);
                     _lastCheckTime = now;
                     _currentStatus = DetermineStatus(_latestGroups);
-
-                    // 한 줄 요약 로그 작성
-                    List<string> parts = new List<string>();
-                    foreach (var grp in _latestGroups)
-                    {
-                        List<string> bStr = new List<string>();
-                        if (grp.Buckets.ContainsKey("weekly")) bStr.Add(string.Format("Wk:{0:F1}%", grp.Buckets["weekly"].RemainingPercent));
-                        if (grp.Buckets.ContainsKey("5h")) bStr.Add(string.Format("5h:{0:F1}%", grp.Buckets["5h"].RemainingPercent));
-                        parts.Add(string.Format("{0}({1})", grp.DisplayName, string.Join(", ", bStr.ToArray())));
-                    }
-                    WriteUsageLog(string.Join(" | ", parts.ToArray()));
 
                     UpdateTrayUI();
                 }
@@ -740,8 +861,8 @@ namespace AntigravityTokenMonitor
                 sb.AppendLine("========================================================================");
                 sb.AppendLine("   Antigravity Token Monitor v5.0");
                 sb.AppendLine("========================================================================");
-                sb.AppendLine(string.Format(" 조회 시각: {0:yyyy-MM-dd HH:mm:ss}       | 갱신 주기: {1}초",
-                    _lastCheckTime == DateTime.MinValue ? now : _lastCheckTime, _config.GetEffectiveIntervalSeconds()));
+                sb.AppendLine(string.Format(" 조회 시각: {0:yyyy-MM-dd HH:mm:ss}       | 갱신 주기: {1}초 (속도윈도우: {2}초)",
+                    _lastCheckTime == DateTime.MinValue ? now : _lastCheckTime, _config.GetEffectiveIntervalSeconds(), _config.GetEffectiveSpeedWindowSeconds()));
                 sb.AppendLine(string.Format(" 근무 시간: 평일 09:00-18:00 (오늘 남은 실근무: {0:F1}h | 주간 잔여 실근무: {1:F1}h)",
                     activeWorkToday, activeWorkWeekly));
                 sb.AppendLine(string.Format(" 종합 상태: [{0}]", _currentStatus));

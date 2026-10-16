@@ -209,7 +209,7 @@ namespace AntigravityTokenMonitor
             // 시작 시 클라우드 Key-Value 서버에서 최신 주간 상태 동기화 시도
             if (_config.sync_enabled)
             {
-                SyncPullFromServer();
+                try { SyncPullFromServer(); } catch { }
             }
 
             InitTrayIcon();

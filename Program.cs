@@ -9,6 +9,7 @@ using System.Management;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
@@ -117,7 +118,8 @@ namespace AntigravityTokenMonitor
     static class Program
     {
         private static NotifyIcon _notifyIcon;
-        private static System.Windows.Forms.Timer _timer;
+        private static System.Threading.Timer _timer;
+        private static SynchronizationContext _syncContext;
         private static AppConfig _config;
         private static JavaScriptSerializer _jsonSerializer;
 
@@ -163,14 +165,12 @@ namespace AntigravityTokenMonitor
 
             WriteSystemLog("INFO", "Antigravity Token Monitor v5.0 시작");
 
+            _syncContext = WindowsFormsSynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+
             InitTrayIcon();
 
-            _timer = new System.Windows.Forms.Timer();
-            _timer.Interval = _config.GetEffectiveIntervalSeconds() * 1000;
-            _timer.Tick += delegate(object sender, EventArgs e) { PerformCheck(); };
-            _timer.Start();
-
-            PerformCheck();
+            int intervalMs = _config.GetEffectiveIntervalSeconds() * 1000;
+            _timer = new System.Threading.Timer(delegate(object state) { PerformCheck(); }, null, 0, intervalMs);
 
             Application.Run();
         }
@@ -619,51 +619,54 @@ namespace AntigravityTokenMonitor
 
         private static void PerformCheck()
         {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                PerformCheckInternal();
+            });
+        }
+
+        private static void PerformCheckInternal()
+        {
             if (_isChecking) return;
             _isChecking = true;
 
-            MethodInvoker action = delegate
+            try
             {
-                try
+                // 1. Hot-Reload: 매 호출 주기마다 config.json 최신 설정 자동 반영
+                _config = LoadConfig();
+                int targetIntervalMs = _config.GetEffectiveIntervalSeconds() * 1000;
+                if (_timer != null)
                 {
-                    // 1. Hot-Reload: 매 호출 주기마다 config.json 최신 설정 자동 반영
-                    _config = LoadConfig();
-                    int targetIntervalMs = _config.GetEffectiveIntervalSeconds() * 1000;
-                    if (_timer != null && _timer.Interval != targetIntervalMs)
-                    {
-                        _timer.Interval = targetIntervalMs;
-                    }
-
-                    // 2. API 호출
-                    string json = FetchQuotaSummaryJson();
-                    if (string.IsNullOrEmpty(json))
-                    {
-                        _currentStatus = StatusLevel.Error;
-                        UpdateTrayUI();
-                        return;
-                    }
-
-                    DateTime now = DateTime.Now;
-                    _latestGroups = ParseQuotaSummary(json, now);
-                    _lastCheckTime = now;
-                    _currentStatus = DetermineStatus(_latestGroups);
-
-                    UpdateTrayUI();
+                    _timer.Change(targetIntervalMs, targetIntervalMs);
                 }
-                catch (Exception ex)
+
+                // 2. API 호출
+                string json = FetchQuotaSummaryJson();
+                if (string.IsNullOrEmpty(json))
                 {
                     _currentStatus = StatusLevel.Error;
-                    WriteSystemLog("ERROR", "PerformCheck 예외: " + ex.Message);
                     UpdateTrayUI();
+                    return;
                 }
-                finally
-                {
-                    _isChecking = false;
-                    TrimMemory();
-                }
-            };
 
-            action.BeginInvoke(null, null);
+                DateTime now = DateTime.Now;
+                _latestGroups = ParseQuotaSummary(json, now);
+                _lastCheckTime = now;
+                _currentStatus = DetermineStatus(_latestGroups);
+
+                UpdateTrayUI();
+            }
+            catch (Exception ex)
+            {
+                _currentStatus = StatusLevel.Error;
+                WriteSystemLog("ERROR", "PerformCheck 예외: " + ex.Message);
+                UpdateTrayUI();
+            }
+            finally
+            {
+                _isChecking = false;
+                TrimMemory();
+            }
         }
 
         private static void TrimMemory()
@@ -722,13 +725,19 @@ namespace AntigravityTokenMonitor
 
         private static void UpdateTrayUI()
         {
-            if (_notifyIcon == null) return;
-
-            if (_notifyIcon.ContextMenuStrip != null && _notifyIcon.ContextMenuStrip.InvokeRequired)
+            if (_syncContext != null)
             {
-                _notifyIcon.ContextMenuStrip.BeginInvoke(new Action(UpdateTrayUI));
-                return;
+                _syncContext.Post(delegate { UpdateTrayUIInternal(); }, null);
             }
+            else
+            {
+                UpdateTrayUIInternal();
+            }
+        }
+
+        private static void UpdateTrayUIInternal()
+        {
+            if (_notifyIcon == null) return;
 
             // 대표 표시 숫자 (Gemini 5h 우선, 없으면 Argon weekly)
             int displayPct = 100;
@@ -938,7 +947,7 @@ namespace AntigravityTokenMonitor
             {
                 btnRefresh.Enabled = false;
                 PerformCheck();
-                Timer t = new Timer { Interval = 1000 };
+                System.Windows.Forms.Timer t = new System.Windows.Forms.Timer { Interval = 1000 };
                 t.Tick += delegate
                 {
                     t.Stop();
